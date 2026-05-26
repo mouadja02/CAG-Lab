@@ -1,0 +1,5 @@
+# Model pricing — input/output cost per 1M tokens (USD).
+# Update this file when prices change; do NOT hardcode prices anywhere else.
+gpt-4o-mini:
+  input: 0.15
+  output: 0.60

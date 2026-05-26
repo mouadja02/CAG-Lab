@@ -14,7 +14,8 @@ dependencies = [
     "pinecone>=9.0.0",
     "openai>=1.0.0",
     "litellm>=1.0.0",
-    "botocore"
+    "botocore",
+    "pyyaml>=6.0"
 ]
 
 [project.scripts]

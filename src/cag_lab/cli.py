@@ -89,6 +89,18 @@ def ask(
 
 
 
+@app.command(name="run")
+def run(
+    config: str = typer.Option(
+        ..., "--config", "-c", help="Path to experiment YAML file"
+    ),
+) -> None:
+    """Run a benchmark experiment defined in a YAML config file."""
+    from cag_lab.benchmark.runner import run_experiment
+
+    run_experiment(config)
+
+
 @app.command(name="dataset")
 def dataset_cmd(
     action: str = typer.Argument(..., help="Action: validate"),
