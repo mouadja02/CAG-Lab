@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cag_lab"
+version = "0.1.0"
+description = "A benchmark lab comparing RAG, semantic caching, and long-context generation"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.9.0",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.0.0",
+]
+
+[project.scripts]
+cag-lab = "cag_lab.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
