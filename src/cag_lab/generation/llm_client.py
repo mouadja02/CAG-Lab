@@ -2,6 +2,8 @@ from dataclasses import dataclass
 
 import litellm
 
+from cag_lab.config import get_settings
+
 
 @dataclass
 class CompletionResult:
@@ -15,9 +17,12 @@ def complete(
     messages: list[dict[str, str]],
     api_base: str | None = None,
 ) -> CompletionResult:
-    kwargs = {}
+    settings = get_settings()
+    kwargs: dict = {}
     if api_base is not None:
         kwargs["api_base"] = api_base
+    if model.startswith("openrouter/"):
+        kwargs["api_key"] = settings.openrouter_api_key.get_secret_value()
     response = litellm.completion(model=model, messages=messages, **kwargs)
 
     content = response.choices[0].message.content or ""

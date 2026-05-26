@@ -7,6 +7,16 @@ from pydantic import BaseModel, SecretStr, ValidationError
 _ENV_FILE = Path(__file__).resolve().parent.parent.parent / ".env"
 
 
+def _ensure_env_loaded() -> None:
+    if _ENV_FILE.exists():
+        load_dotenv(_ENV_FILE)
+
+
+def get_openrouter_model() -> str:
+    _ensure_env_loaded()
+    return os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
+
+
 class Settings(BaseModel):
     openai_api_key: SecretStr
     openrouter_api_key: SecretStr
@@ -14,8 +24,7 @@ class Settings(BaseModel):
 
 
 def get_settings() -> Settings:
-    if _ENV_FILE.exists():
-        load_dotenv(_ENV_FILE)
+    _ensure_env_loaded()
 
     raw = {
         "openai_api_key": os.getenv("OPENAI_API_KEY"),
