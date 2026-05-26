@@ -120,3 +120,38 @@ def llm_judge_correctness(
 def citation_present(answer: str) -> bool:
     """Return True if the answer text includes a Sources line."""
     return bool(re.search(r"Sources:", answer, re.IGNORECASE))
+
+
+# ---------------------------------------------------------------------------
+# Cache metrics
+# ---------------------------------------------------------------------------
+
+def cache_hit_rate(records: list[dict]) -> float:
+    """Fraction of questions served from cache."""
+    if not records:
+        return 0.0
+    hits = sum(1 for r in records if r.get("cache_hit"))
+    return hits / len(records)
+
+
+def false_positive_hit_rate(records: list[dict]) -> float:
+    """Fraction of cache hits that were served for a *different* question
+    (cached source_id != query source_id)."""
+    hits = [r for r in records if r.get("cache_hit")]
+    if not hits:
+        return 0.0
+    fp = sum(1 for r in hits if r.get("false_positive"))
+    return fp / len(hits)
+
+
+def cost_saved(records: list[dict]) -> float:
+    """Total generation cost saved by serving answers from cache."""
+    return sum(r.get("cost_saved", 0.0) for r in records)
+
+
+def avg_generation_cost(records: list[dict]) -> float:
+    """Average generation cost for cache misses (full RAG answers)."""
+    misses = [r for r in records if not r.get("cache_hit") and r.get("cost", 0) > 0]
+    if not misses:
+        return 0.0
+    return sum(r["cost"] for r in misses) / len(misses)

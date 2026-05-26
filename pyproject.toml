@@ -15,7 +15,8 @@ dependencies = [
     "openai>=1.0.0",
     "litellm>=1.0.0",
     "botocore",
-    "pyyaml>=6.0"
+    "pyyaml>=6.0",
+    "redis>=5.0.0"
 ]
 
 [project.scripts]
