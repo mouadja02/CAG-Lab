@@ -81,3 +81,9 @@ def ask(
     typer.echo(result.answer)
     typer.echo(f"\nSources: {result.sources}")
     typer.echo(f"Tokens: {result.prompt_tokens} prompt + {result.completion_tokens} completion")
+    for i, chunk in enumerate(chunks, 1):
+        preview = chunk.text[:200].replace("\n", " ")
+        typer.echo(f"\n--- Chunk {i} (score: {chunk.score:.4f}) ---")
+        if i == 1:
+            typer.echo(f"Metadata keys: {list(chunk.source.keys())}")
+        typer.echo(preview)
