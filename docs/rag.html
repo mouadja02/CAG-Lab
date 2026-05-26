@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAG — Retrieval-Augmented Generation | CAG-Lab</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="index.html" class="nav-brand">CAG-Lab</a>
+    <ul class="nav-links">
+      <li><a href="index.html">Overview</a></li>
+      <li><a href="rag.html" class="active">RAG</a></li>
+      <li><a href="cag.html">CAG</a></li>
+      <li><a href="report.html">Report</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="container">
+
+<section class="hero">
+  <h1>Retrieval-Augmented Generation</h1>
+  <p>How classic RAG works, when it shines, and what it costs.</p>
+</section>
+
+<div class="section">
+  <h2>What Is RAG?</h2>
+  <p>Retrieval-Augmented Generation (RAG) combines information retrieval with large language models. Instead of relying solely on the model's training data, RAG first retrieves relevant documents from an external knowledge base, then feeds those documents to the LLM as context for generating an answer.</p>
+  <p>This approach grounds the LLM's output in real, verifiable sources — critical for domains like technical documentation, legal texts, or enterprise knowledge bases where accuracy matters and hallucinations are costly.</p>
+</div>
+
+<div class="section">
+  <h2>Architecture Flow</h2>
+
+  <svg class="diagram" viewBox="0 0 900 380" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#818cf8"/><stop offset="100%" stop-color="#c084fc"/></linearGradient>
+      <filter id="shadow"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.3"/></filter>
+    </defs>
+
+    <!-- User query -->
+    <rect x="30" y="160" width="150" height="60" rx="12" fill="#1e293b" stroke="#334155" stroke-width="1.5" filter="url(#shadow)"/>
+    <text x="105" y="184" fill="#e2e8f0" font-size="14" font-weight="600" text-anchor="middle">User</text>
+    <text x="105" y="204" fill="#94a3b8" font-size="11" text-anchor="middle">Query</text>
+
+    <!-- Arrow 1 -->
+    <line x1="180" y1="190" x2="220" y2="190" stroke="#334155" stroke-width="2" marker-end="url(#arrowhead)"/>
+    <defs><marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#334155"/></marker></defs>
+
+    <!-- Embedding -->
+    <rect x="230" y="160" width="160" height="60" rx="12" fill="#1e293b" stroke="#334155" stroke-width="1.5" filter="url(#shadow)"/>
+    <text x="310" y="184" fill="#e2e8f0" font-size="14" font-weight="600" text-anchor="middle">OpenAI</text>
+    <text x="310" y="204" fill="#94a3b8" font-size="11" text-anchor="middle">text-embedding-3-small</text>
+
+    <!-- Arrow 2 -->
+    <line x1="390" y1="190" x2="430" y2="190" stroke="#334155" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+    <!-- Pinecone -->
+    <rect x="440" y="160" width="160" height="60" rx="12" fill="#1e293b" stroke="#334155" stroke-width="1.5" filter="url(#shadow)"/>
+    <text x="520" y="184" fill="#e2e8f0" font-size="14" font-weight="600" text-anchor="middle">Pinecone</text>
+    <text x="520" y="204" fill="#94a3b8" font-size="11" text-anchor="middle">Vector Search (512d)</text>
+
+    <!-- Arrow 3 to chunks -->
+    <line x1="600" y1="190" x2="640" y2="190" stroke="#334155" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+    <!-- Top-K chunks -->
+    <rect x="650" y="160" width="140" height="60" rx="12" fill="#1e293b" stroke="#334155" stroke-width="1.5" filter="url(#shadow)"/>
+    <text x="720" y="184" fill="#e2e8f0" font-size="14" font-weight="600" text-anchor="middle">Top-K</text>
+    <text x="720" y="204" fill="#94a3b8" font-size="11" text-anchor="middle">Chunks (K=5)</text>
+
+    <!-- Arrow 4 down to LLM -->
+    <path d="M720 220 L720 270 L520 270" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+
+    <!-- LLM -->
+    <rect x="360" y="260" width="320" height="60" rx="12" fill="#1e293b" stroke="#334155" stroke-width="1.5" filter="url(#shadow)"/>
+    <text x="520" y="284" fill="#e2e8f0" font-size="14" font-weight="600" text-anchor="middle">LLM (GPT-4o-mini)</text>
+    <text x="520" y="304" fill="#94a3b8" font-size="11" text-anchor="middle">Prompt: system + chunks + question</text>
+
+    <!-- Arrow 5 to answer -->
+    <path d="M520 320 L520 340 L105 340" stroke="#34d399" stroke-width="2" fill="none" marker-end="url(#arrowgreen)"/>
+    <defs><marker id="arrowgreen" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#34d399"/></marker></defs>
+
+    <!-- Answer -->
+    <rect x="30" y="310" width="150" height="60" rx="12" fill="#1e293b" stroke="#34d399" stroke-width="1.5" filter="url(#shadow)"/>
+    <text x="105" y="334" fill="#34d399" font-size="14" font-weight="600" text-anchor="middle">Answer</text>
+    <text x="105" y="354" fill="#94a3b8" font-size="11" text-anchor="middle">+ cited sources</text>
+
+    <!-- Knowledge base db -->
+    <rect x="440" y="80" width="160" height="40" rx="8" fill="#0f172a" stroke="#334155" stroke-width="1" stroke-dasharray="4 4"/>
+    <text x="520" y="105" fill="#64748b" font-size="11" text-anchor="middle">AWS Docs (Pinecone)</text>
+    <line x1="520" y1="120" x2="520" y2="158" stroke="#64748b" stroke-width="1" stroke-dasharray="4 4"/>
+    <circle cx="520" cy="159" r="3" fill="#64748b"/>
+  </svg>
+</div>
+
+<div class="section">
+  <h2>Step-by-Step</h2>
+  <div class="step-flow">
+    <div class="step">
+      <div class="step-num">1</div>
+      <h4>Query Embedding</h4>
+      <p>User question is embedded via OpenAI text-embedding-3-small (512 dimensions)</p>
+    </div>
+    <div class="step-arrow">&rarr;</div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <h4>Vector Search</h4>
+      <p>Pinecone finds the top-K most similar document chunks via cosine similarity</p>
+    </div>
+    <div class="step-arrow">&rarr;</div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <h4>Context Assembly</h4>
+      <p>Chunks are numbered and formatted into a prompt with system instructions</p>
+    </div>
+    <div class="step-arrow">&rarr;</div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <h4>LLM Generation</h4>
+      <p>GPT-4o-mini generates an answer using ONLY the provided chunks, citing sources</p>
+    </div>
+    <div class="step-arrow">&rarr;</div>
+    <div class="step">
+      <div class="step-num">5</div>
+      <h4>Evaluation</h4>
+      <p>LLM judge scores correctness; latency, cost, and citation metrics recorded</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Cost Model</h2>
+  <p>Every question incurs the full pipeline cost — embedding call + Pinecone query + LLM generation + judge evaluation. At ~300 prompt tokens per retrieval context + the user question, plus variable completion tokens depending on answer length.</p>
+
+  <div class="cards">
+    <div class="card">
+      <div class="label">Embedding Cost</div>
+      <div class="value green">$0.00002</div>
+      <div class="sub">text-embedding-3-small @ $0.02/1M tokens</div>
+    </div>
+    <div class="card">
+      <div class="label">Generation Cost</div>
+      <div class="value blue">~$0.00046</div>
+      <div class="sub">GPT-4o-mini: $0.15 input + $0.60 output per 1M tokens</div>
+    </div>
+    <div class="card">
+      <div class="label">Judge Cost</div>
+      <div class="value purple">~$0.00013</div>
+      <div class="sub">Separate GPT-4o-mini call for correctness scoring</div>
+    </div>
+    <div class="card">
+      <div class="label">Per-Question Total</div>
+      <div class="value amber">~$0.00061</div>
+      <div class="sub">Embedding + generation + judge combined</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Limitations</h2>
+  <div class="feature-grid">
+    <div class="feature-item">
+      <div class="icon">&#9888;</div>
+      <h4>Every query is expensive</h4>
+      <p>No caching — repeated questions pay the full cost every time. For high-traffic scenarios, this adds up fast.</p>
+    </div>
+    <div class="feature-item">
+      <div class="icon">&#9201;</div>
+      <h4>Latency is bounded by LLM</h4>
+      <p>p50 of ~4 seconds per question, dominated by LLM inference time. Pinecone retrieval is fast (~100ms), but generation takes 2-8 seconds.</p>
+    </div>
+    <div class="feature-item">
+      <div class="icon">&#127919;</div>
+      <h4>Quality depends on retrieval</h4>
+      <p>If the right chunk isn't in the top-K results, the LLM can't answer. Mean judge score of 0.333 reflects this — many questions require multi-hop reasoning.</p>
+    </div>
+    <div class="feature-item">
+      <div class="icon">&#128202;</div>
+      <h4>No knowledge of past queries</h4>
+      <p>Each question is handled independently. There's no mechanism to learn from prior answers or detect repeated questions.</p>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<footer>
+  CAG-Lab &middot; Benchmarking RAG vs Cache-Augmented Generation
+</footer>
+
+</body>
+</html>
