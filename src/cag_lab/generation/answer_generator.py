@@ -2,7 +2,7 @@ import re
 from dataclasses import dataclass
 
 from cag_lab.generation.llm_client import complete
-from cag_lab.retrieval.pinecone_retriever import Chunk
+from cag_lab.retrieval import Chunk
 
 
 @dataclass
@@ -24,9 +24,7 @@ SYSTEM_PROMPT = (
 
 
 def _build_messages(question: str, chunks: list[Chunk]) -> list[dict[str, str]]:
-    numbered = "\n\n".join(
-        f"[{i}] {chunk.text}" for i, chunk in enumerate(chunks, 1)
-    )
+    numbered = "\n\n".join(f"[{i}] {chunk.text}" for i, chunk in enumerate(chunks, 1))
     user = f"Document chunks:\n\n{numbered}\n\nQuestion: {question}"
     return [
         {"role": "system", "content": SYSTEM_PROMPT},

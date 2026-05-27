@@ -1,8 +1,10 @@
 from dataclasses import dataclass
 
-import litellm
+from openai import OpenAI
 
 from cag_lab.config import get_settings
+
+_OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 
 
 @dataclass
@@ -16,20 +18,39 @@ def complete(
     model: str,
     messages: list[dict[str, str]],
     api_base: str | None = None,
+    api_key: str | None = None,
 ) -> CompletionResult:
     settings = get_settings()
-    kwargs: dict = {}
-    if api_base is not None:
-        kwargs["api_base"] = api_base
+    clean_model = model.removeprefix("openrouter/")
+
     if model.startswith("openrouter/"):
-        kwargs["api_key"] = settings.openrouter_api_key.get_secret_value()
-    response = litellm.completion(model=model, messages=messages, **kwargs)
+        effective_base = api_base or _OPENROUTER_BASE
+        effective_key = api_key or (
+            settings.judge_api_key.get_secret_value()
+            if settings.judge_api_key
+            else settings.openrouter_api_key.get_secret_value()
+            if settings.openrouter_api_key
+            else "none"
+        )
+    else:
+        effective_base = api_base or settings.llm_api_base
+        effective_key = api_key or (
+            settings.llm_api_key.get_secret_value() if settings.llm_api_key else "none"
+        )
+
+    client = OpenAI(base_url=effective_base, api_key=effective_key)
+    response = client.chat.completions.create(
+        model=clean_model,
+        messages=messages,  # type: ignore[arg-type]
+    )
 
     content = response.choices[0].message.content or ""
-    usage = response.usage or litellm.Usage(prompt_tokens=0, completion_tokens=0, total_tokens=0)
+    usage = response.usage
+    prompt_tokens = usage.prompt_tokens if usage else 0
+    completion_tokens = usage.completion_tokens if usage else 0
 
     return CompletionResult(
         answer=content,
-        prompt_tokens=usage.prompt_tokens,
-        completion_tokens=usage.completion_tokens,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
     )

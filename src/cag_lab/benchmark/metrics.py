@@ -14,6 +14,7 @@ import yaml
 # Latency
 # ---------------------------------------------------------------------------
 
+
 def latency_stats(latencies_seconds: list[float]) -> dict:
     """Compute p50 and p95 from a list of per-question wall-clock latencies (s)."""
     if not latencies_seconds:
@@ -35,6 +36,7 @@ def latency_stats(latencies_seconds: list[float]) -> dict:
 # ---------------------------------------------------------------------------
 # Cost
 # ---------------------------------------------------------------------------
+
 
 def load_pricing(pricing_path: str | Path = "configs/models/pricing.yaml") -> dict:
     """Load model pricing from YAML file."""
@@ -114,8 +116,70 @@ def llm_judge_correctness(
 
 
 # ---------------------------------------------------------------------------
+# Retrieval relevance
+# ---------------------------------------------------------------------------
+
+_RELEVANCE_SYSTEM_PROMPT = (
+    "You are a retrieval-quality evaluator. Given a question, an expected answer, "
+    "and a set of retrieved document chunks, judge whether the chunks contain "
+    "enough information to answer the question correctly.\n\n"
+    "Score from 0 to 2:\n"
+    "  0 = chunks are irrelevant or missing critical information\n"
+    "  1 = chunks contain partial information but not enough for a complete answer\n"
+    "  2 = chunks contain all information needed to produce the expected answer\n\n"
+    "Respond with a JSON object with two keys:\n"
+    '  "score": 0, 1, or 2\n'
+    '  "rationale": one short sentence explaining your decision'
+)
+
+
+def retrieval_relevance(
+    question: str,
+    expected_answer: str,
+    retrieved_chunks: list[str],
+    *,
+    judge_model: str = "gpt-4o-mini",
+    api_base: str | None = None,
+) -> dict:
+    """Score whether retrieved chunks contain the information needed to answer.
+
+    Returns {"score": 0|1|2, "rationale": str}.
+    **Costs money per call** — uses the judge_model LLM.
+    """
+    from cag_lab.generation.llm_client import complete
+
+    chunks_text = "\n\n".join(
+        f"[{i}] {chunk}" for i, chunk in enumerate(retrieved_chunks, 1)
+    )
+    messages = [
+        {"role": "system", "content": _RELEVANCE_SYSTEM_PROMPT},
+        {
+            "role": "user",
+            "content": (
+                f"Question: {question}\n\n"
+                f"Expected answer: {expected_answer}\n\n"
+                f"Retrieved chunks:\n{chunks_text}"
+            ),
+        },
+    ]
+    result = complete(judge_model, messages, api_base=api_base)
+
+    import json
+
+    try:
+        parsed = json.loads(result.answer)
+        return {
+            "score": int(parsed.get("score", 0)),
+            "rationale": str(parsed.get("rationale", "")),
+        }
+    except (json.JSONDecodeError, KeyError, ValueError):
+        return {"score": 0, "rationale": "relevance judge output unparseable"}
+
+
+# ---------------------------------------------------------------------------
 # Citation presence
 # ---------------------------------------------------------------------------
+
 
 def citation_present(answer: str) -> bool:
     """Return True if the answer text includes a Sources line."""
@@ -125,6 +189,7 @@ def citation_present(answer: str) -> bool:
 # ---------------------------------------------------------------------------
 # Cache metrics
 # ---------------------------------------------------------------------------
+
 
 def cache_hit_rate(records: list[dict]) -> float:
     """Fraction of questions served from cache."""

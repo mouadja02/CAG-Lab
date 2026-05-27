@@ -1,5 +1,7 @@
 architecture: classic_rag
-dataset: data/benchmark_sets/aws_docs_v1.jsonl
+dataset: data/benchmark_sets/aws_docs_v3.jsonl
 index: aws-docs
 model: gpt-4o-mini # we ll be using a simple model because we want to evaluate retrieval quality, not model general knowledge
 top_k: 5
+judge_model: openrouter/openai/gpt-oss-120b:nitro # separate model to avoid self-evaluation bias
+eval_retrieval: true # score retrieval quality per question (costs extra LLM calls)

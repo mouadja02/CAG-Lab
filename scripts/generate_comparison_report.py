@@ -27,6 +27,7 @@ from pathlib import Path
 # Data loading & computation
 # ---------------------------------------------------------------------------
 
+
 def load_jsonl(path: str) -> list[dict]:
     records = []
     with open(path, encoding="utf-8") as f:
@@ -55,6 +56,35 @@ def stats(values: list[float]) -> dict:
         "median": pct(50),
         "p50": pct(50),
         "p95": pct(95),
+    }
+
+
+def _difficulty_breakdown(records: list[dict]) -> dict:
+    """Breakdown of scores by difficulty level."""
+    result = {}
+    for diff in ["easy", "medium", "hard"]:
+        group = [r for r in records if r.get("difficulty") == diff]
+        if group:
+            result[diff] = {
+                "count": len(group),
+                "mean_score": sum(r.get("judge_score", 0) for r in group) / len(group),
+            }
+    return result
+
+
+def _retrieval_relevance_summary(records: list[dict]) -> dict:
+    """Summary of retrieval relevance scores (if present)."""
+    rel_scores = [
+        r["retrieval_relevance"] for r in records if "retrieval_relevance" in r
+    ]
+    if not rel_scores:
+        return {}
+    return {
+        "mean": sum(rel_scores) / len(rel_scores),
+        "fully_relevant": sum(1 for s in rel_scores if s == 2),
+        "partially_relevant": sum(1 for s in rel_scores if s == 1),
+        "irrelevant": sum(1 for s in rel_scores if s == 0),
+        "total": len(rel_scores),
     }
 
 
@@ -97,18 +127,47 @@ def compute_summary(records: list[dict]) -> dict:
         miss_costs = [r.get("cost", 0) for r in records if not r.get("cache_hit")]
         hit_costs = [r.get("cost", 0) for r in records if r.get("cache_hit")]
 
+        # Paraphrase tier breakdown
+        tier_data = {}
+        tier_records = [r for r in records if r.get("paraphrase_tier")]
+        if tier_records:
+            for tier in ["easy", "medium", "hard"]:
+                group = [r for r in tier_records if r.get("paraphrase_tier") == tier]
+                if group:
+                    tier_data[tier] = {
+                        "count": len(group),
+                        "hit_count": sum(1 for r in group if r.get("cache_hit")),
+                        "mean_score": sum(r.get("judge_score", 0) for r in group)
+                        / len(group),
+                    }
+
+        # False positive details
+        fp_details = []
+        for r in records:
+            if r.get("false_positive"):
+                fp_details.append(
+                    {
+                        "question": r.get("question", "")[:80],
+                        "cached_source": r.get("cached_question_id", "?"),
+                        "expected_source": r.get("question_id", "?"),
+                        "match_score": r.get("cache_match_score", "?"),
+                    }
+                )
+
         cache_summary = {
             "hit_rate": hits_n / n if n else 0,
             "hit_count": hits_n,
             "miss_count": n - hits_n,
             "false_positive_rate": fp / hits_n if hits_n else 0,
             "false_positive_count": fp,
+            "false_positive_details": fp_details,
             "cost_saved": saved,
             "hit_latency_stats": stats(hit_latencies),
             "miss_latency_stats": stats(miss_latencies),
             "avg_hit_cost": sum(hit_costs) / len(hit_costs) if hit_costs else 0,
             "avg_miss_cost": sum(miss_costs) / len(miss_costs) if miss_costs else 0,
             "by_relationship": rel_hits,
+            "by_paraphrase_tier": tier_data,
         }
 
     return {
@@ -127,12 +186,15 @@ def compute_summary(records: list[dict]) -> dict:
         "costs": costs,
         "qtype_scores": qtype_scores,
         "cache": cache_summary,
+        "difficulty_scores": _difficulty_breakdown(records),
+        "retrieval_relevance": _retrieval_relevance_summary(records),
     }
 
 
 # ---------------------------------------------------------------------------
 # HTML report
 # ---------------------------------------------------------------------------
+
 
 def _json_dumps(obj):
     return json.dumps(obj, ensure_ascii=False)
@@ -223,29 +285,29 @@ footer {{ text-align:center; color:#475569; font-size:0.8rem; margin-top:48px; p
 <header>
   <h1>CAG-Lab Benchmark Comparison</h1>
   <p>{label_a} vs {label_b} — gpt-4o-mini on aws-docs</p>
-  <p style="font-size:0.8rem; color:#64748b;">Generated {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</p>
+  <p style="font-size:0.8rem; color:#64748b;">Generated {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}</p>
 </header>
 
 <div class="cards">
   <div class="card">
     <div class="label">Mean Judge Score</div>
     <div class="value green">{summary_a["mean_score"]:.3f} → {summary_b["mean_score"]:.3f}</div>
-    <div class="sub">{'%+.0f%%' % ((summary_b["mean_score"]-summary_a["mean_score"])/summary_a["mean_score"]*100) if summary_a["mean_score"] else ''} change</div>
+    <div class="sub">{"%+.0f%%" % ((summary_b["mean_score"] - summary_a["mean_score"]) / summary_a["mean_score"] * 100) if summary_a["mean_score"] else ""} change</div>
   </div>
   <div class="card">
     <div class="label">p50 Latency</div>
     <div class="value blue">{summary_a["latency_stats"]["p50"]:.2f}s → {summary_b["latency_stats"]["p50"]:.2f}s</div>
-    <div class="sub">Cache: {((1 - summary_b["latency_stats"]["p50"]/(summary_a["latency_stats"]["p50"] if summary_a["latency_stats"]["p50"] else 1))*100):.0f}% faster</div>
+    <div class="sub">Cache: {((1 - summary_b["latency_stats"]["p50"] / (summary_a["latency_stats"]["p50"] if summary_a["latency_stats"]["p50"] else 1)) * 100):.0f}% faster</div>
   </div>
   <div class="card">
     <div class="label">Cost per 1k Questions</div>
     <div class="value purple">${summary_a["cost_per_1k"]:.4f} → ${summary_b["cost_per_1k"]:.4f}</div>
-    <div class="sub">{'%+.0f%%' % ((summary_b["cost_per_1k"]-summary_a["cost_per_1k"])/summary_a["cost_per_1k"]*100) if summary_a["cost_per_1k"] else ''} change</div>
+    <div class="sub">{"%+.0f%%" % ((summary_b["cost_per_1k"] - summary_a["cost_per_1k"]) / summary_a["cost_per_1k"] * 100) if summary_a["cost_per_1k"] else ""} change</div>
   </div>
   <div class="card">
     <div class="label">Citation Rate</div>
     <div class="value amber">{summary_a["citation_rate"]:.1%} → {summary_b["citation_rate"]:.1%}</div>
-    <div class="sub">{'%+.0fpp' % ((summary_b["citation_rate"]-summary_a["citation_rate"])*100)} change</div>
+    <div class="sub">{"%+.0fpp" % ((summary_b["citation_rate"] - summary_a["citation_rate"]) * 100)} change</div>
   </div>
 </div>
 """
@@ -273,7 +335,7 @@ footer {{ text-align:center; color:#475569; font-size:0.8rem; margin-top:48px; p
   <div class="card">
     <div class="label">Hit vs Miss Latency</div>
     <div class="value blue">{c["hit_latency_stats"]["p50"]:.2f}s vs {c["miss_latency_stats"]["p50"]:.2f}s</div>
-    <div class="sub">p50: cache hits are {((1 - c["hit_latency_stats"]["p50"]/(c["miss_latency_stats"]["p50"] if c["miss_latency_stats"]["p50"] else 1))*100):.0f}% faster</div>
+    <div class="sub">p50: cache hits are {((1 - c["hit_latency_stats"]["p50"] / (c["miss_latency_stats"]["p50"] if c["miss_latency_stats"]["p50"] else 1)) * 100):.0f}% faster</div>
   </div>
 </div>
 """
@@ -323,20 +385,26 @@ footer {{ text-align:center; color:#475569; font-size:0.8rem; margin-top:48px; p
 """
 
     # Table section
-    html += """
+    html += (
+        """
 <div class="section">
   <h2>Query Type Breakdown</h2>
   <table class="table-compare">
     <thead>
       <tr>
         <th>Query Type</th>
-        <th style="text-align:center">""" + label_a + """ Score</th>
-        <th style="text-align:center">""" + label_b + """ Score</th>
+        <th style="text-align:center">"""
+        + label_a
+        + """ Score</th>
+        <th style="text-align:center">"""
+        + label_b
+        + """ Score</th>
         <th style="text-align:center">Δ</th>
       </tr>
     </thead>
     <tbody>
 """
+    )
     all_qtypes = sorted(set(summary_a["qtype_scores"]) | set(summary_b["qtype_scores"]))
     for qt in all_qtypes:
         sa = summary_a["qtype_scores"].get(qt, {}).get("mean_score", 0)
@@ -520,6 +588,7 @@ new Chart(ctxPie, {{
 # Markdown report
 # ---------------------------------------------------------------------------
 
+
 def generate_markdown(
     label_a: str,
     summary_a: dict,
@@ -556,13 +625,61 @@ def generate_markdown(
         return f"| {metric} | {sa} | {sb} | {sc} |"
 
     lines.append(row("Questions", summary_a["n"], summary_b["n"], fmt=",d"))
-    lines.append(row("Mean Judge Score", summary_a["mean_score"], summary_b["mean_score"]))
-    lines.append(row("Citation Rate", summary_a["citation_rate"], summary_b["citation_rate"], pct=True))
-    lines.append(row("p50 Latency", summary_a["latency_stats"]["p50"], summary_b["latency_stats"]["p50"], fmt=".2f", suffix=" s"))
-    lines.append(row("p95 Latency", summary_a["latency_stats"]["p95"], summary_b["latency_stats"]["p95"], fmt=".2f", suffix=" s"))
-    lines.append(row("Total Tokens", summary_a["total_tokens"], summary_b["total_tokens"], fmt=",d"))
-    lines.append(row("Total Cost", summary_a["total_cost"], summary_b["total_cost"], fmt=".6f", suffix=" $"))
-    lines.append(row("Cost per 1k Q", summary_a["cost_per_1k"], summary_b["cost_per_1k"], fmt=".6f", suffix=" $"))
+    lines.append(
+        row("Mean Judge Score", summary_a["mean_score"], summary_b["mean_score"])
+    )
+    lines.append(
+        row(
+            "Citation Rate",
+            summary_a["citation_rate"],
+            summary_b["citation_rate"],
+            pct=True,
+        )
+    )
+    lines.append(
+        row(
+            "p50 Latency",
+            summary_a["latency_stats"]["p50"],
+            summary_b["latency_stats"]["p50"],
+            fmt=".2f",
+            suffix=" s",
+        )
+    )
+    lines.append(
+        row(
+            "p95 Latency",
+            summary_a["latency_stats"]["p95"],
+            summary_b["latency_stats"]["p95"],
+            fmt=".2f",
+            suffix=" s",
+        )
+    )
+    lines.append(
+        row(
+            "Total Tokens",
+            summary_a["total_tokens"],
+            summary_b["total_tokens"],
+            fmt=",d",
+        )
+    )
+    lines.append(
+        row(
+            "Total Cost",
+            summary_a["total_cost"],
+            summary_b["total_cost"],
+            fmt=".6f",
+            suffix=" $",
+        )
+    )
+    lines.append(
+        row(
+            "Cost per 1k Q",
+            summary_a["cost_per_1k"],
+            summary_b["cost_per_1k"],
+            fmt=".6f",
+            suffix=" $",
+        )
+    )
 
     lines += [""]
 
@@ -600,7 +717,7 @@ def generate_markdown(
     for qt in all_qtypes:
         sa = summary_a["qtype_scores"].get(qt, {}).get("mean_score", 0)
         sb = summary_b["qtype_scores"].get(qt, {}).get("mean_score", 0)
-        lines.append(f"| {qt} | {sa:.3f} | {sb:.3f} | {sb-sa:+.3f} |")
+        lines.append(f"| {qt} | {sa:.3f} | {sb:.3f} | {sb - sa:+.3f} |")
 
     lines += [""]
 
@@ -614,13 +731,24 @@ def generate_markdown(
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Generate comparison report from two experiment JSONL files")
-    parser.add_argument("--auto", action="store_true", help="Auto-discover latest two JSONL files in results/jsonl/")
+    parser = argparse.ArgumentParser(
+        description="Generate comparison report from two experiment JSONL files"
+    )
+    parser.add_argument(
+        "--auto",
+        action="store_true",
+        help="Auto-discover latest two JSONL files in results/jsonl/",
+    )
     parser.add_argument("jsonl_a", nargs="?", help="Path to first JSONL results file")
-    parser.add_argument("--label-a", default="RAG Baseline", help="Label for first experiment")
+    parser.add_argument(
+        "--label-a", default="RAG Baseline", help="Label for first experiment"
+    )
     parser.add_argument("jsonl_b", nargs="?", help="Path to second JSONL results file")
-    parser.add_argument("--label-b", default="Semantic Cache", help="Label for second experiment")
+    parser.add_argument(
+        "--label-b", default="Semantic Cache", help="Label for second experiment"
+    )
     parser.add_argument("--output-dir", default="docs", help="Output directory")
     parser.add_argument("--prefix", default="report", help="Output filename prefix")
     args = parser.parse_args()
@@ -628,17 +756,28 @@ def main():
     if args.auto:
         jsonl_dir = Path("results") / "jsonl"
         if not jsonl_dir.exists():
-            print("Error: results/jsonl/ directory not found. Run experiments first.", file=sys.stderr)
+            print(
+                "Error: results/jsonl/ directory not found. Run experiments first.",
+                file=sys.stderr,
+            )
             sys.exit(1)
         jsonl_files = sorted(jsonl_dir.glob("*.jsonl"), key=lambda p: p.stat().st_mtime)
         if len(jsonl_files) < 2:
-            print("Error: need at least 2 JSONL files in results/jsonl/.", file=sys.stderr)
+            print(
+                "Error: need at least 2 JSONL files in results/jsonl/.", file=sys.stderr
+            )
             sys.exit(1)
         args.jsonl_a = str(jsonl_files[-2])
         args.jsonl_b = str(jsonl_files[-1])
-        if "rag_baseline" in jsonl_files[-2].name.lower() and "semantic_cache" in jsonl_files[-1].name.lower():
+        if (
+            "rag_baseline" in jsonl_files[-2].name.lower()
+            and "semantic_cache" in jsonl_files[-1].name.lower()
+        ):
             pass
-        elif "semantic_cache" in jsonl_files[-2].name.lower() and "rag_baseline" in jsonl_files[-1].name.lower():
+        elif (
+            "semantic_cache" in jsonl_files[-2].name.lower()
+            and "rag_baseline" in jsonl_files[-1].name.lower()
+        ):
             args.jsonl_a, args.jsonl_b = args.jsonl_b, args.jsonl_a
 
     if not args.jsonl_a or not args.jsonl_b:
@@ -657,13 +796,19 @@ def main():
     out_dir.mkdir(exist_ok=True)
 
     html_path = generate_html(
-        args.label_a, summary_a, is_cache_a,
-        args.label_b, summary_b, is_cache_b,
+        args.label_a,
+        summary_a,
+        is_cache_a,
+        args.label_b,
+        summary_b,
+        is_cache_b,
         str(out_dir / f"{args.prefix}.html"),
     )
     md_path = generate_markdown(
-        args.label_a, summary_a,
-        args.label_b, summary_b,
+        args.label_a,
+        summary_a,
+        args.label_b,
+        summary_b,
         str(out_dir / f"{args.prefix}.md"),
     )
 

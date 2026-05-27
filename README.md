@@ -32,11 +32,40 @@ knowledge alone, making retrieval irrelevant.
 We want a model that **must rely on the retrieved chunks** to answer correctly.
 This way, the benchmark actually measures *retrieval quality* — not model memorization.
 
+## Why Qdrant? Why Migrate from Pinecone?
+
+The original pipeline relied on **Pinecone** (cloud-hosted vector DB) for retrieval
+and **Redis Stack** for the semantic cache. This meant every experiment required:
+
+- A stable internet connection
+- A Pinecone subscription
+- Network latency between the local machine and Pinecone's servers
+
+**Research should be reproducible offline.** A benchmark that depends on a cloud
+service isn't fully reproducible — someone else cloning the repo can't run the exact
+same experiments without their own Pinecone credentials and an index populated with
+the same vectors.
+
+We migrated the retrieval layer from Pinecone to **Qdrant**, an open-source vector
+database that runs locally via Docker, for three reasons:
+
+1. **Zero-dependency testing** — Both retrieval (Qdrant) and caching (Redis) now run
+   locally. No cloud services, no API quotas, no network flakiness.
+2. **Reproducible science** — Anyone can clone the repo, run `docker compose up -d`,
+   `python scripts/migrate_pinecone_to_qdrant.py --force`, and get identical results.
+3. **Same capabilities** — Qdrant supports the same cosine-distance vector search with
+   512-dimensional embeddings as Pinecone, matching our `text-embedding-3-small`
+   configuration exactly.
+
+The original Pinecone path remains available — set `VECTOR_DB=pinecone` (the default)
+to use the cloud index. The migration script preserves every vector and its metadata,
+allowing seamless switching between backends for A/B comparison of retrieval latency.
+
 ## What We Compare
 
 | Architecture | Description |
 |---|---|
-| **Classic RAG** | Embed query → retrieve top-K from Pinecone → generate with LLM |
+| **Classic RAG** | Embed query → retrieve top-K from vector DB → generate with LLM |
 | **Semantic Cache (CAG)** | Embed query → Redis vector search → HIT: return cached / MISS: run RAG + store |
 
 Coming next: long-context CAG (preload all docs into the context window + cache KV state).
@@ -73,13 +102,22 @@ cd cag-lab
 # Install
 python -m venv .venv
 .venv\Scripts\activate     # Windows
+# source .venv/bin/activate  # macOS/Linux
 pip install -e .
 
-# Start Redis (required for semantic cache experiments)
+# Start local services (Redis for cache, Qdrant for retrieval)
 docker compose up -d
 
 # Configure — copy .env.example to .env and fill in your API keys
 cp .env.example .env
+
+# --- Option A: Internet-independent (recommended for reproducibility) ---
+# Set Qdrant as vector backend and migrate the Pinecone index locally
+$env:VECTOR_DB = "qdrant"   # Windows; use export on macOS/Linux
+python scripts/migrate_pinecone_to_qdrant.py --index aws-docs --force
+
+# --- Option B: Use Pinecone cloud (requires PINECONE_API_KEY) ---
+# $env:VECTOR_DB = "pinecone"  # this is the default
 
 # Run the RAG baseline (120 questions)
 cag-lab run --config configs/experiments/rag_baseline.yaml
@@ -110,14 +148,15 @@ cag-lab/
 │   ├── jsonl/              # Raw experiment results (committed)
 │   └── reports/            # Per-experiment markdown reports
 ├── scripts/
-│   └── generate_comparison_report.py
+│   ├── generate_comparison_report.py
+│   └── migrate_pinecone_to_qdrant.py  # Pinecone → Qdrant migration
 ├── src/
 │   └── cag_lab/
 │       ├── benchmark/      # Dataset, metrics, runner, workload
 │       ├── cache/          # Redis vector search semantic cache
 │       ├── generation/     # LLM client + answer generator
-│       └── retrieval/      # Pinecone retrieval
-├── docker-compose.yml      # Redis Stack (with vector search)
+│       └── retrieval/      # Qdrant & Pinecone retrievers (VECTOR_DB env switch)
+├── docker-compose.yml      # Redis Stack + Qdrant
 └── pyproject.toml
 ```
 
@@ -126,17 +165,76 @@ cag-lab/
 | Layer | Technology |
 |---|---|
 | Embedding | OpenAI `text-embedding-3-small` (512d) |
-| Vector DB | Pinecone (`aws-docs` index) |
+| Vector DB | Qdrant (default, local) / Pinecone (`aws-docs` index, cloud) |
 | Cache | Redis Stack (HNSW, cosine distance) |
-| LLM | GPT-4o-mini via LiteLLM |
+| LLM | GPT-4o-mini via OpenAI client (OpenRouter-compatible) |
 | Judge | GPT-4o-mini |
 | CLI | Typer |
 | Dashboard | Vanilla HTML/CSS + Chart.js |
+
+## Pinecone → Qdrant Migration
+
+### Motivation
+
+Before this migration, every experiment required an active Pinecone cloud subscription
+and a stable internet connection. This violated a core principle of reproducible
+research: **anyone cloning the repo should be able to reproduce the exact same results**
+without signing up for cloud services.
+
+### What We Migrated
+
+| From | To |
+|---|---|
+| **Pinecone** (cloud, 89,221 vectors) | **Qdrant** (local, Docker) |
+| 512-dim `aws-docs` index | 512-dim `aws-docs` collection |
+| Backslash path IDs (`documents\AWS-...`) | Deterministic UUIDs (`uuid5` from original ID) |
+| Metadata: `content`, `filePath`, `chunkIndex`, etc. | Exact copy (plus `_pinecone_id` for traceability) |
+
+### How It Works
+
+```
+┌─────────────┐     list() / fetch()      ┌───────────┐     upsert()      ┌───────────┐
+│  Pinecone    │ ────────────────────────→ │  Migration │ ───────────────→ │  Qdrant   │
+│  cloud index │ ←──── vectors + metadata  │  script    │ ←──── UUIDs     │  (local)  │
+└─────────────┘                           └───────────┘                  └───────────┘
+```
+
+1. **List** — Pinecone's `list(prefix="")` paginates through all 89,221 vector IDs
+   in batches
+2. **Fetch** — Each batch of IDs is fetched with `index.fetch(ids=...)` to retrieve
+   the full 512-dim embedding vectors and metadata payloads
+3. **Transform IDs** — Pinecone uses Windows-style file paths as IDs (e.g.
+   `documents\AWS-Kinesis\...`), which Qdrant rejects. We generate deterministic
+   UUIDs via `uuid.uuid5(uuid.NAMESPACE_URL, original_id)` and store the original
+   ID as `_pinecone_id` in the payload
+4. **Upsert** — All 89,221 points are uploaded to a local Qdrant collection with
+   cosine-distance vector index, matching the original Pinecone configuration
+
+### Switching Between Backends
+
+The retriever is backend-agnostic. Set the `VECTOR_DB` environment variable:
+
+```bash
+# Use local Qdrant (default for offline experiments)
+export VECTOR_DB=qdrant
+
+# Use Pinecone cloud (original backend)
+export VECTOR_DB=pinecone  # or leave unset (this is the default)
+```
+
+Both backends expose the identical `Chunk` and `Retriever` interface — the only
+difference is which Docker container the vectors live in. This also lets us measure
+retrieval latency differences between local and cloud vector search in future
+experiments.
 
 ## Roadmap
 
 This is an active playground — here's what's coming:
 
+- [x] **Local vector DB** — Replaced Pinecone cloud with Qdrant (Docker) for
+  internet-independent benchmarking. VECTOR_DB env switch for A/B comparison.
+- [x] **Direct OpenAI client** — Replaced LiteLLM with native `openai.OpenAI` pointing
+  at OpenRouter, eliminating noisy provider-discovery warnings.
 - [ ] **Local SLMs** — Test with Ollama/LM Studio models (Llama, Mistral, Phi) to
   eliminate API costs and measure on-device performance
 - [ ] **Long-context CAG** — Preload the entire knowledge base into the context window,

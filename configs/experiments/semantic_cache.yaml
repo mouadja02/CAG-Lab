@@ -1,8 +1,9 @@
 architecture: semantic_cache_rag
-dataset: data/benchmark_sets/aws_docs_v1.jsonl
+dataset: data/benchmark_sets/aws_docs_v3.jsonl
 index: aws-docs
 model: gpt-4o-mini
 top_k: 5
+judge_model: openrouter/openai/gpt-oss-120b:nitro
 cache_threshold: 0.92
 cache_ttl_seconds: 3600
 workload:
@@ -10,14 +11,5 @@ workload:
   paraphrase_rate: 0.2
   new_query_rate: 0.4
   seed: 42
-near_duplicate_pairs:
-  - question: "How do I rotate an IAM access key for a user?"
-    source_id: "nd-001"
-    expected_answer: "To rotate an IAM access key, create a second key, update applications, then deactivate and delete the old key."
-    query_type: "procedural"
-    difficulty: "medium"
-  - question: "How do I rotate a KMS key automatically?"
-    source_id: "nd-002"
-    expected_answer: "Enable automatic key rotation on the KMS key; AWS KMS rotates the key material annually."
-    query_type: "procedural"
-    difficulty: "medium"
+  paraphrase_mode: template # "template" (cheap prefix-based)
+  paraphrase_model: gpt-4o-mini

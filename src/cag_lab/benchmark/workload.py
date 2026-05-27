@@ -20,6 +20,9 @@ class WorkloadItem:
     expected_answer: str
     query_type: str
     difficulty: str
+    paraphrase_tier: str | None = (
+        None  # "easy", "medium", "hard" (only for paraphrases)
+    )
 
 
 def generate_workload(
@@ -29,7 +32,16 @@ def generate_workload(
     new_query_rate: float = 0.5,
     seed: int = 42,
     near_duplicate_pairs: list[dict] | None = None,
+    paraphrase_mode: str = "template",
+    paraphrase_model: str = "gpt-4o-mini",
 ) -> list[WorkloadItem]:
+    """Generate a synthetic workload from base questions.
+
+    Args:
+        paraphrase_mode: "template" for cheap prefix-based paraphrases (original),
+                         "llm" for LLM-generated paraphrases with tiered difficulty.
+        paraphrase_model: Model to use for LLM paraphrase generation.
+    """
     total_rate = repeated_query_rate + paraphrase_rate + new_query_rate
     if abs(total_rate - 1.0) > 0.001:
         raise ValueError(
@@ -79,18 +91,38 @@ def generate_workload(
         )
 
     paraphrases = rng.choices(emitted_new, k=n_paraphrase)
-    for ref in paraphrases:
-        workload.append(
-            WorkloadItem(
-                item_id=_item_id(),
-                question=_paraphrase(ref.question, rng),
-                source_id=ref.source_id,
-                relationship="paraphrase",
-                expected_answer=ref.expected_answer,
-                query_type=ref.query_type,
-                difficulty=ref.difficulty,
-            )
+
+    if paraphrase_mode == "llm":
+        paraphrased_texts = _generate_llm_paraphrases(
+            [ref.question for ref in paraphrases], paraphrase_model
         )
+        for ref, (text, tier) in zip(paraphrases, paraphrased_texts):
+            workload.append(
+                WorkloadItem(
+                    item_id=_item_id(),
+                    question=text,
+                    source_id=ref.source_id,
+                    relationship="paraphrase",
+                    expected_answer=ref.expected_answer,
+                    query_type=ref.query_type,
+                    difficulty=ref.difficulty,
+                    paraphrase_tier=tier,
+                )
+            )
+    else:
+        for ref in paraphrases:
+            workload.append(
+                WorkloadItem(
+                    item_id=_item_id(),
+                    question=_paraphrase(ref.question, rng),
+                    source_id=ref.source_id,
+                    relationship="paraphrase",
+                    expected_answer=ref.expected_answer,
+                    query_type=ref.query_type,
+                    difficulty=ref.difficulty,
+                    paraphrase_tier="easy",
+                )
+            )
 
     if near_duplicate_pairs:
         for pair in near_duplicate_pairs:
@@ -110,6 +142,10 @@ def generate_workload(
     return workload
 
 
+# ---------------------------------------------------------------------------
+# Template-based paraphrasing (cheap, shallow)
+# ---------------------------------------------------------------------------
+
 _PARAPHRASE_PREFIXES = [
     "Can you tell me: {}",
     "Please explain: {}",
@@ -124,3 +160,65 @@ _PARAPHRASE_PREFIXES = [
 
 def _paraphrase(text: str, rng: random.Random) -> str:
     return rng.choice(_PARAPHRASE_PREFIXES).format(text)
+
+
+# ---------------------------------------------------------------------------
+# LLM-based paraphrasing (realistic, tiered difficulty)
+# ---------------------------------------------------------------------------
+
+_PARAPHRASE_SYSTEM_PROMPT = """\
+You are a paraphrase generator. Given a question, produce exactly 3 rephrasings \
+at different difficulty tiers. Each rephrasing must ask the SAME question but \
+with different wording.
+
+Tiers:
+- easy: Swap a few synonyms or reorder clauses. Keep most original words.
+- medium: Rewrite the sentence structure (passive voice, nominalization, split \
+into sub-questions then merge). Change terminology where possible.
+- hard: Completely rephrase using different framing, analogies, or indirect \
+phrasing. A reader should need to think to realize it's the same question.
+
+Respond with a JSON array of 3 objects, each with "tier" and "text" keys.
+Example: [{"tier":"easy","text":"..."},{"tier":"medium","text":"..."},{"tier":"hard","text":"..."}]"""
+
+
+def _generate_llm_paraphrases(
+    questions: list[str], model: str
+) -> list[tuple[str, str]]:
+    """Generate tiered paraphrases for a batch of questions.
+
+    Returns a list of (paraphrased_text, tier) tuples, one per input question.
+    Each question gets a randomly selected tier from the 3 generated options,
+    weighted toward harder tiers to stress-test the cache.
+    """
+    import json
+    import random as stdlib_random
+
+    from cag_lab.generation.llm_client import complete
+    from tqdm import tqdm
+
+    results: list[tuple[str, str]] = []
+    tier_weights = {"easy": 1, "medium": 2, "hard": 3}  # bias toward harder
+
+    for question in tqdm(questions, desc="  Paraphrasing ", unit="q"):
+        messages = [
+            {"role": "system", "content": _PARAPHRASE_SYSTEM_PROMPT},
+            {"role": "user", "content": question},
+        ]
+        try:
+            result = complete(model, messages)
+            parsed = json.loads(result.answer)
+            if isinstance(parsed, list) and len(parsed) >= 3:
+                # Weighted random selection biased toward harder tiers
+                weights = [tier_weights.get(p.get("tier", "easy"), 1) for p in parsed]
+                chosen = stdlib_random.choices(parsed, weights=weights, k=1)[0]
+                results.append((chosen["text"], chosen["tier"]))
+            else:
+                # Fallback: use first item or raw text
+                results.append((parsed[0]["text"] if parsed else question, "easy"))
+        except (json.JSONDecodeError, KeyError, IndexError, TypeError):
+            # Fallback to template paraphrase on failure
+            rng = stdlib_random.Random()
+            results.append((_paraphrase(question, rng), "easy"))
+
+    return results

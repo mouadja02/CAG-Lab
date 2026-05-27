@@ -3,3 +3,14 @@ services:
     image: redis/redis-stack-server:7.2.0-v13
     ports:
       - "6379:6379"
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+volumes:
+  qdrant_data:
