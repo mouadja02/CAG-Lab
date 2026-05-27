@@ -3,3 +3,6 @@
 gpt-4o-mini:
   input: 0.15
   output: 0.60
+nvidia/nemotron-nano-9b-v2:
+  input: 0
+  output: 0

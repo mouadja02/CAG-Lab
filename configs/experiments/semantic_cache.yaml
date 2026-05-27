@@ -1,7 +1,7 @@
 architecture: semantic_cache_rag
 dataset: data/benchmark_sets/aws_docs_v3.jsonl
 index: aws-docs
-model: gpt-4o-mini
+model: nvidia/nemotron-nano-9b-v2
 top_k: 5
 judge_model: openrouter/openai/gpt-oss-120b:nitro
 cache_threshold: 0.92
@@ -12,4 +12,4 @@ workload:
   new_query_rate: 0.4
   seed: 42
   paraphrase_mode: template # "template" (cheap prefix-based)
-  paraphrase_model: gpt-4o-mini
+  paraphrase_model: nvidia/nemotron-nano-9b-v2

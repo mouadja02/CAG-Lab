@@ -43,7 +43,7 @@ def _parse_sources(answer: str) -> list[int]:
 def generate_answer(
     question: str,
     chunks: list[Chunk],
-    model: str = "gpt-4o-mini",
+    model: str ,
     api_base: str | None = None,
 ) -> AnswerResult:
     messages = _build_messages(question, chunks)

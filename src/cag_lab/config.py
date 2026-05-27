@@ -82,4 +82,6 @@ def get_settings() -> Settings:
 
 def get_llm_model() -> str:
     _ensure_env_loaded()
-    return os.getenv("LLM_MODEL", os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini"))
+    return os.getenv(
+        "LLM_MODEL", os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-nano-9b-v2")
+    )

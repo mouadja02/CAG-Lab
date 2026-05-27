@@ -81,7 +81,7 @@ def llm_judge_correctness(
     expected_answer: str,
     generated_answer: str,
     *,
-    judge_model: str = "gpt-4o-mini",
+    judge_model: str,
     api_base: str | None = None,
 ) -> dict:
     """LLM-as-judge correctness score (0 or 1) with a one-line rationale.
@@ -138,7 +138,7 @@ def retrieval_relevance(
     expected_answer: str,
     retrieved_chunks: list[str],
     *,
-    judge_model: str = "gpt-4o-mini",
+    judge_model: str,
     api_base: str | None = None,
 ) -> dict:
     """Score whether retrieved chunks contain the information needed to answer.

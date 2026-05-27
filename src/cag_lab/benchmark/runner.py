@@ -42,7 +42,7 @@ def _run_classic_rag(
     model = config["model"]
     index_name = config["index"]
     top_k = config["top_k"]
-    judge_model = config.get("judge_model", "gpt-4o-mini")
+    judge_model = config.get("judge_model")
     eval_retrieval = config.get("eval_retrieval", False)
 
     retriever = Retriever(index_name=index_name, top_k=top_k)
@@ -107,7 +107,7 @@ def _run_semantic_cache_rag(config: dict, workload, pricing: dict) -> list[dict]
     top_k = config["top_k"]
     threshold = config.get("cache_threshold", 0.92)
     ttl = config.get("cache_ttl_seconds", 3600)
-    judge_model = config.get("judge_model", "gpt-4o-mini")
+    judge_model = config.get("judge_model")
 
     cache = SemanticCache(similarity_threshold=threshold, ttl_seconds=ttl)
     retriever = Retriever(index_name=index_name, top_k=top_k)
