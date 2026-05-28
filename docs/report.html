@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CAG-Lab Benchmark Comparison</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif; background:#0b0f19; color:#e2e8f0; line-height:1.6; }
+.container { max-width:1200px; margin:0 auto; padding:40px 24px; }
+header { text-align:center; margin-bottom:48px; }
+header h1 { font-size:2.2rem; font-weight:700; background:linear-gradient(135deg,#818cf8,#c084fc); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+header p { color:#94a3b8; margin-top:8px; font-size:0.95rem; }
+.cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; margin-bottom:48px; }
+.card { background:#1e293b; border-radius:12px; padding:24px; border:1px solid #334155; }
+.card .label { font-size:0.8rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px; }
+.card .value { font-size:2rem; font-weight:700; }
+.card .value.green { color:#34d399; }
+.card .value.blue { color:#60a5fa; }
+.card .value.purple { color:#a78bfa; }
+.card .value.amber { color:#fbbf24; }
+.card .sub { font-size:0.8rem; color:#64748b; margin-top:4px; }
+.section { margin-bottom:48px; }
+.section h2 { font-size:1.4rem; font-weight:600; margin-bottom:20px; color:#e2e8f0; border-bottom:1px solid #334155; padding-bottom:8px; }
+.chart-row { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+@media(max-width:768px) { .chart-row { grid-template-columns:1fr; } }
+.chart-box { background:#1e293b; border-radius:12px; padding:24px; border:1px solid #334155; }
+.chart-box h3 { font-size:0.95rem; color:#cbd5e1; margin-bottom:16px; text-align:center; }
+.chart-box canvas { max-height:320px; }
+table { width:100%; border-collapse:collapse; background:#1e293b; border-radius:12px; overflow:hidden; border:1px solid #334155; }
+th, td { padding:12px 16px; text-align:left; }
+th { background:#0f172a; color:#94a3b8; font-weight:600; font-size:0.85rem; text-transform:uppercase; }
+td { border-top:1px solid #334155; font-size:0.9rem; }
+tr:hover td { background:#263348; }
+.table-compare td:first-child { color:#94a3b8; width:40%; }
+.table-compare td:nth-child(2), .table-compare td:nth-child(3) { font-weight:600; }
+.highlight { color:#34d399; }
+.dim { color:#f87171; }
+footer { text-align:center; color:#475569; font-size:0.8rem; margin-top:48px; padding-top:24px; border-top:1px solid #1e293b; }
+.badge { display:inline-block; padding:2px 8px; border-radius:6px; font-size:0.75rem; font-weight:600; }
+.badge.green { background:#064e3b; color:#34d399; }
+.badge.blue { background:#1e3a5f; color:#60a5fa; }
+.badge.purple { background:#3b0764; color:#a78bfa; }
+.full-width { grid-column:1/-1; }
+.top-nav { position:sticky; top:0; z-index:100; background:rgba(11,15,25,.92); backdrop-filter:blur(12px); border-bottom:1px solid #334155; }
+.top-nav-inner { max-width:1200px; margin:0 auto; padding:0 24px; display:flex; align-items:center; gap:24px; height:48px; }
+.top-nav-inner a { color:#94a3b8; text-decoration:none; font-size:0.85rem; font-weight:500; }
+.top-nav-inner a:hover { color:#e2e8f0; }
+.top-nav-inner .brand { font-size:1.05rem; font-weight:700; background:linear-gradient(135deg,#818cf8,#c084fc); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+</style>
+</head>
+<body>
+<div class="top-nav"><div class="top-nav-inner">
+  <a href="index.html" class="brand">CAG-Lab</a>
+  <a href="index.html">Overview</a>
+  <a href="rag.html">RAG</a>
+  <a href="cag.html">CAG</a>
+  <a href="report.html" style="color:#e2e8f0;">Report</a>
+</div></div>
+<div class="container">
+<header>
+  <h1>CAG-Lab Benchmark Comparison</h1>
+  <p>RAG Baseline vs Semantic Cache — nvidia/nemotron-nano-9b-v2</p>
+  <p style="font-size:0.8rem; color:#64748b;">Generated 2026-05-28 09:24 UTC</p>
+</header>
+
+<div class="cards">
+  <div class="card">
+    <div class="label">Mean Judge Score</div>
+    <div class="value green">0.650 → 0.686</div>
+    <div class="sub">+6% change</div>
+  </div>
+  <div class="card">
+    <div class="label">p50 Latency</div>
+    <div class="value blue">5.06s → 0.56s</div>
+    <div class="sub">Cache: 89% faster</div>
+  </div>
+  <div class="card">
+    <div class="label">Cost per 1k Questions</div>
+    <div class="value purple">$0.2207 → $0.1043</div>
+    <div class="sub">-53% change</div>
+  </div>
+  <div class="card">
+    <div class="label">Citation Rate</div>
+    <div class="value amber">87.5% → 90.6%</div>
+    <div class="sub">+3pp change</div>
+  </div>
+</div>
+
+<div class="cards">
+  <div class="card">
+    <div class="label">Cache Hit Rate</div>
+    <div class="value green">54.6%</div>
+    <div class="sub">273 hits / 500 total</div>
+  </div>
+  <div class="card">
+    <div class="label">False-Positive Rate</div>
+    <div class="value" style="color:#f87171">0.0%</div>
+    <div class="sub">0 of 273 hits were wrong source</div>
+  </div>
+  <div class="card">
+    <div class="label">Cost Saved</div>
+    <div class="value purple">$0.056689</div>
+    <div class="sub">Generation cost avoided</div>
+  </div>
+  <div class="card">
+    <div class="label">Hit vs Miss Latency</div>
+    <div class="value blue">0.46s vs 5.63s</div>
+    <div class="sub">p50: cache hits are 92% faster</div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Performance Comparison</h2>
+  <div class="chart-row">
+    <div class="chart-box">
+      <h3>Latency (p50 / p95)</h3>
+      <canvas id="chartLatency"></canvas>
+    </div>
+    <div class="chart-box">
+      <h3>Cost Comparison</h3>
+      <canvas id="chartCost"></canvas>
+    </div>
+  </div>
+  <div class="chart-row" style="margin-top:24px;">
+    <div class="chart-box">
+      <h3>Latency Distribution</h3>
+      <canvas id="chartLatDist"></canvas>
+    </div>
+    <div class="chart-box">
+      <h3>Judge Score by Query Type</h3>
+      <canvas id="chartQtypeScore"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-row" style="margin-top:24px;">
+    <div class="chart-box">
+      <h3>Cache Hit Rate by Relationship</h3>
+      <canvas id="chartRelHit"></canvas>
+    </div>
+    <div class="chart-box">
+      <h3>Cost Breakdown</h3>
+      <canvas id="chartCostPie"></canvas>
+    </div>
+  </div>
+
+</div>
+
+<div class="section">
+  <h2>Query Type Breakdown</h2>
+  <table class="table-compare">
+    <thead>
+      <tr>
+        <th>Query Type</th>
+        <th style="text-align:center">RAG Baseline Score</th>
+        <th style="text-align:center">Semantic Cache Score</th>
+        <th style="text-align:center">Δ</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>comparison <span style="color:#64748b;font-size:0.75rem;">(n=19/42)</span></td>
+        <td style="text-align:center">0.789</td>
+        <td style="text-align:center">0.738</td>
+        <td style="text-align:center" class="dim">-0.051</td>
+      </tr>
+      <tr>
+        <td>factual <span style="color:#64748b;font-size:0.75rem;">(n=81/206)</span></td>
+        <td style="text-align:center">0.617</td>
+        <td style="text-align:center">0.631</td>
+        <td style="text-align:center" class="highlight">+0.014</td>
+      </tr>
+      <tr>
+        <td>multi_hop <span style="color:#64748b;font-size:0.75rem;">(n=15/36)</span></td>
+        <td style="text-align:center">0.867</td>
+        <td style="text-align:center">0.833</td>
+        <td style="text-align:center" class="dim">-0.033</td>
+      </tr>
+      <tr>
+        <td>procedural <span style="color:#64748b;font-size:0.75rem;">(n=65/166)</span></td>
+        <td style="text-align:center">0.646</td>
+        <td style="text-align:center">0.717</td>
+        <td style="text-align:center" class="highlight">+0.071</td>
+      </tr>
+      <tr>
+        <td>troubleshooting <span style="color:#64748b;font-size:0.75rem;">(n=20/50)</span></td>
+        <td style="text-align:center">0.500</td>
+        <td style="text-align:center">0.660</td>
+        <td style="text-align:center" class="highlight">+0.160</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h2>Detailed Metrics</h2>
+  <table class="table-compare">
+    <thead>
+      <tr><th>Metric</th><th style="text-align:center">RAG Baseline</th><th style="text-align:center">Semantic Cache</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Questions</td><td style="text-align:center">200</td><td style="text-align:center">500</td></tr>
+      <tr><td>Mean Judge Score</td><td style="text-align:center">0.650</td><td style="text-align:center">0.686</td></tr>
+      <tr><td>Citation Rate</td><td style="text-align:center">87.5%</td><td style="text-align:center">90.6%</td></tr>
+      <tr><td>p50 Latency</td><td style="text-align:center">5.06 s</td><td style="text-align:center">0.56 s</td></tr>
+      <tr><td>p95 Latency</td><td style="text-align:center">14.66 s</td><td style="text-align:center">10.42 s</td></tr>
+      <tr><td>Total Tokens</td><td style="text-align:center">627,419</td><td style="text-align:center">716,556</td></tr>
+      <tr><td>Total Cost</td><td style="text-align:center">$0.044148</td><td style="text-align:center">$0.052138</td></tr>
+      <tr><td>Cost per 1k Questions</td><td style="text-align:center">$0.220740</td><td style="text-align:center">$0.104276</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+const LATA = "RAG Baseline";
+const LATB = "Semantic Cache";
+const qtypeScoresA = {"factual": {"count": 81, "mean_score": 0.6172839506172839}, "procedural": {"count": 65, "mean_score": 0.6461538461538462}, "comparison": {"count": 19, "mean_score": 0.7894736842105263}, "troubleshooting": {"count": 20, "mean_score": 0.5}, "multi_hop": {"count": 15, "mean_score": 0.8666666666666667}};
+const qtypeScoresB = {"procedural": {"count": 166, "mean_score": 0.7168674698795181}, "factual": {"count": 206, "mean_score": 0.6310679611650486}, "comparison": {"count": 42, "mean_score": 0.7380952380952381}, "troubleshooting": {"count": 50, "mean_score": 0.66}, "multi_hop": {"count": 36, "mean_score": 0.8333333333333334}};
+const latA = [7.4664, 5.891, 4.5356, 4.3476, 4.6114, 9.6414, 7.2637, 4.5337, 3.9645, 3.1337, 4.1852, 3.8847, 5.0722, 4.6046, 4.8804, 3.8737, 6.9199, 6.8299, 3.7001, 4.7242, 4.387, 5.3238, 4.7948, 19.4443, 3.7341, 7.7937, 4.3231, 5.4288, 4.2698, 4.4351, 12.7065, 12.9881, 8.6892, 4.7011, 4.5043, 3.7471, 3.9905, 5.0392, 5.3566, 19.735, 3.9423, 5.6002, 4.202, 7.6676, 4.1989, 4.2522, 4.3592, 3.0565, 5.6408, 4.3009, 128.0915, 4.7642, 4.3278, 6.325, 4.1602, 4.2573, 3.8408, 3.3067, 4.1549, 4.2268, 2.983, 3.3876, 3.1356, 4.2532, 3.6801, 5.0303, 4.4986, 5.4668, 13.2735, 2.9468, 8.5256, 6.758, 16.7734, 3.5022, 3.3018, 3.3083, 3.2132, 13.73, 4.5242, 9.1516, 5.1634, 9.3645, 6.5083, 5.1217, 6.5338, 5.0743, 4.7816, 5.8928, 7.8592, 5.4768, 4.0769, 5.0583, 5.8121, 7.7295, 4.4757, 5.9354, 3.9496, 5.516, 6.0245, 7.4675, 4.4003, 5.063, 6.6254, 4.5861, 4.4055, 5.0287, 26.7046, 10.7866, 14.5438, 6.8223, 23.6711, 7.9657, 6.6898, 4.2922, 11.4102, 3.891, 4.6042, 5.0468, 5.651, 4.9327, 5.6574, 6.7889, 2.9614, 23.3369, 5.127, 7.8713, 4.5283, 7.897, 5.1753, 4.7166, 7.4085, 6.6344, 5.9713, 6.9937, 23.3578, 5.1313, 5.1306, 4.2944, 4.1963, 3.6132, 5.5767, 5.034, 4.3358, 4.1218, 5.2453, 3.4813, 4.789, 6.8587, 4.7208, 4.7945, 6.4807, 4.8147, 7.0541, 129.6211, 8.2534, 6.7788, 4.6856, 3.7917, 6.7826, 11.669, 4.1694, 4.5737, 12.705, 5.3798, 5.9937, 6.1554, 4.2694, 6.8112, 4.2776, 5.0906, 5.3803, 2.8032, 4.1533, 6.4191, 6.9717, 4.1682, 4.1672, 4.8442, 14.3452, 5.6247, 6.2678, 11.7165, 4.6836, 4.8156, 5.4289, 5.5014, 4.977, 4.3392, 6.2059, 7.2104, 5.6659, 7.3798, 4.461, 3.9082, 5.3851, 5.3127, 20.6007, 4.4514, 3.7546, 4.0047];
+const latB = [7.0455, 7.5132, 6.6745, 0.4627, 5.4811, 0.4551, 0.4484, 4.3658, 5.5579, 0.47, 0.4443, 0.4434, 0.4458, 5.7477, 0.5722, 19.251, 0.4828, 0.57, 5.3888, 0.4838, 4.6204, 4.2697, 5.759, 0.4501, 4.9644, 11.0709, 8.3185, 6.483, 0.4503, 0.4807, 0.4603, 5.9978, 0.4601, 0.6061, 5.6563, 0.8293, 6.2821, 5.1746, 0.4732, 0.4614, 5.049, 4.7035, 0.4665, 0.4365, 0.4589, 0.4815, 5.5334, 0.4604, 0.4565, 0.448, 4.7789, 0.4333, 0.4724, 5.4435, 3.0893, 0.4367, 4.5291, 5.418, 5.8122, 0.4356, 7.0332, 0.5465, 4.2858, 18.8253, 0.4589, 0.416, 0.4755, 0.4751, 5.0283, 0.4585, 0.5508, 0.4447, 0.4802, 4.2372, 0.4609, 0.5576, 0.4535, 6.4822, 5.6505, 0.4643, 3.7169, 4.4278, 0.4588, 0.4441, 4.4962, 0.4471, 4.976, 0.4766, 3.6118, 0.4565, 0.4555, 5.9666, 0.4455, 5.4445, 4.104, 4.2321, 0.4604, 5.335, 0.4628, 4.8458, 4.9219, 6.8671, 5.0725, 4.3299, 0.5091, 5.444, 0.5791, 0.4577, 0.4544, 0.473, 5.4317, 0.5649, 5.3494, 0.4762, 6.5394, 0.4588, 4.6236, 3.7152, 3.7754, 0.5926, 5.7107, 0.4499, 7.1284, 6.4795, 0.4694, 4.3735, 0.4473, 0.4918, 0.4465, 5.1453, 21.6645, 0.5471, 0.4815, 6.5983, 0.4665, 6.1386, 6.2395, 0.4214, 0.4546, 4.6107, 0.4758, 9.7194, 0.4772, 5.2585, 5.4756, 0.5587, 0.4912, 5.7732, 0.4462, 7.0633, 0.4698, 5.3769, 0.4725, 0.5464, 5.1468, 0.4679, 21.4356, 0.4733, 0.5516, 4.2869, 4.2772, 6.0927, 0.5585, 0.4158, 4.9914, 5.0321, 4.6252, 5.2701, 0.439, 7.8504, 0.4687, 0.4991, 4.665, 5.235, 10.4142, 0.4535, 3.8155, 0.5613, 4.7193, 5.1968, 5.3335, 0.4291, 0.4592, 0.461, 0.4812, 0.4792, 6.2892, 0.4761, 0.471, 0.4601, 8.7315, 0.5619, 0.5381, 0.4703, 0.5851, 0.486, 0.4569, 0.4434, 4.6758, 0.4659, 7.4083, 0.4509, 5.4697, 5.8885, 0.4459, 0.442, 5.3969, 7.5804, 0.5772, 0.5817, 6.4821, 0.4896, 5.3651, 0.4269, 16.7524, 0.4772, 4.6456, 0.4777, 0.4563, 0.5037, 0.465, 10.5357, 0.4645, 0.4376, 5.5998, 0.5319, 3.2542, 0.4729, 4.2696, 127.8598, 128.6465, 0.4687, 4.0797, 0.4939, 4.9368, 0.477, 5.1199, 0.4529, 0.4539, 22.1205, 5.6756, 0.5249, 0.4345, 6.8361, 5.6299, 0.4624, 0.5418, 4.6558, 9.4913, 4.3649, 0.4883, 6.0976, 0.4846, 0.4752, 0.4594, 4.9639, 0.4769, 5.1837, 0.4607, 4.0556, 0.4301, 7.5756, 0.4787, 0.4437, 4.9673, 8.6548, 0.4628, 9.5447, 0.4389, 0.431, 4.5824, 0.4769, 0.494, 4.5662, 6.0839, 0.459, 0.4632, 5.622, 4.5295, 0.4647, 0.4504, 0.449, 4.1532, 5.4786, 4.7962, 4.1503, 0.4836, 0.4783, 0.4576, 4.8243, 0.4646, 0.489, 0.5566, 0.4713, 0.4748, 5.3303, 4.2005, 0.5565, 0.4586, 0.4533, 0.4531, 0.4831, 4.7283, 5.3026, 0.4737, 5.9072, 0.4854, 4.5502, 0.4671, 6.6142, 8.4308, 0.4589, 4.6377, 4.811, 0.4645, 0.4924, 0.4698, 0.5073, 4.6445, 8.5014, 0.4656, 0.4586, 4.6788, 0.457, 4.8799, 0.4447, 5.8637, 6.2037, 0.4529, 0.4653, 3.3895, 129.5552, 16.9884, 0.4618, 3.6678, 0.4687, 5.2156, 0.5058, 0.4546, 0.4545, 6.7447, 0.4716, 5.5753, 0.4564, 0.4695, 5.4557, 0.4651, 8.5444, 8.2184, 0.4826, 9.6079, 13.052, 14.4004, 4.5393, 0.7025, 0.4562, 6.443, 0.4407, 0.4365, 4.8431, 0.4738, 5.8408, 0.9883, 7.1359, 0.43, 8.2465, 0.4834, 0.4628, 5.3157, 0.5849, 9.5272, 0.4296, 0.4607, 0.4796, 7.418, 32.3434, 8.0195, 0.4758, 0.4648, 5.4287, 0.4651, 0.4441, 7.3922, 9.6217, 0.4336, 0.45, 14.0692, 0.4547, 6.8816, 0.4411, 7.5115, 0.4483, 6.337, 0.4587, 0.4526, 0.4548, 6.5775, 0.4389, 0.4571, 5.7227, 6.3386, 0.4524, 8.0718, 0.56, 8.9652, 0.4624, 6.5252, 0.4413, 0.4713, 0.4442, 5.0653, 19.9945, 0.5868, 0.5092, 7.3599, 8.4736, 0.4607, 0.4414, 0.4433, 6.9426, 0.4602, 6.9081, 0.4503, 0.4574, 8.0513, 9.1312, 10.5627, 0.4415, 0.4942, 6.9707, 5.4063, 0.4523, 0.5922, 0.5477, 0.5176, 8.0638, 0.4597, 10.5611, 0.4563, 0.5167, 0.4483, 0.463, 19.4517, 0.4595, 6.4659, 0.4602, 0.7298, 0.5531, 4.9471, 0.4462, 0.4825, 0.4915, 5.1219, 0.4589, 0.5596, 11.1595, 0.442, 0.6318, 5.2484, 0.4523, 0.4582, 5.8591, 1.2535, 0.5775, 0.5159, 9.5955, 0.4347, 6.5483, 0.4381, 19.9918, 4.27, 0.4736, 8.3149, 4.2407, 0.4464, 0.469, 4.7017, 0.4551, 0.4681, 0.4477, 0.6124, 4.0665, 5.2554, 0.5727, 19.4922, 172.7237, 0.4438, 5.9008, 0.4326, 3.8352, 0.4444, 10.4432, 5.9002, 0.4362, 0.4398, 0.453, 6.0571, 0.4572, 8.4466, 0.4764];
+
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.borderColor = '#334155';
+Chart.defaults.font.family = 'Inter';
+
+// Adaptive bin size: use p95 of combined latencies to avoid long-tail distortion
+const _allLat = [...latA, ...latB].filter(v => v > 0).sort((a, b) => a - b);
+const _p95idx = Math.max(0, Math.floor(_allLat.length * 0.95) - 1);
+const _latMax = (_allLat[_p95idx] || Math.max(..._allLat, 1));
+const _rawBin = _latMax / 20;
+const _mag = Math.pow(10, Math.floor(Math.log10(_rawBin || 1)));
+const binSize = Math.max(0.5, Math.ceil(_rawBin / _mag) * _mag);
+const latEnd = Math.ceil(_latMax / binSize) * binSize;
+
+function makeBins(data, end, bSize) {
+  if (!data.length) return {labels:[],bins:[]};
+  const n = Math.ceil(end / bSize);
+  const labels = [];
+  const bins = new Array(n).fill(0);
+  for (let i = 0; i < n; i++) labels.push((i*bSize).toFixed(1)+'-'+((i+1)*bSize).toFixed(1)+'s');
+  for (const v of data) {
+    if (v > end) continue;
+    bins[Math.min(Math.floor(v / bSize), n-1)]++;
+  }
+  return {labels, bins};
+}
+
+const ctx1 = document.getElementById('chartLatency');
+new Chart(ctx1, {
+  type: 'bar',
+  data: {
+    labels: ['p50','p95'],
+    datasets: [
+      { label: LATA, data: [5.061,14.655], backgroundColor: '#60a5fa80', borderColor: '#60a5fa', borderWidth: 1 },
+      { label: LATB, data: [0.561,10.416], backgroundColor: '#a78bfa80', borderColor: '#a78bfa', borderWidth: 1 },
+    ]
+  },
+  options: { responsive:true, plugins:{ legend:{position:'bottom',labels:{padding:20}} }, scales:{ y:{ title:{display:true,text:'Seconds'}, beginAtZero:true } } }
+});
+
+const ctx2 = document.getElementById('chartCost');
+new Chart(ctx2, {
+  type: 'bar',
+  data: {
+    labels: ['Total Cost ($)','Cost/1k Q ($)'],
+    datasets: [
+      { label: LATA, data: [0.044148,0.220740], backgroundColor: '#60a5fa80', borderColor: '#60a5fa', borderWidth: 1 },
+      { label: LATB, data: [0.052138,0.104276], backgroundColor: '#a78bfa80', borderColor: '#a78bfa', borderWidth: 1 },
+    ]
+  },
+  options: { responsive:true, plugins:{ legend:{position:'bottom',labels:{padding:20}} }, scales:{ y:{ beginAtZero:true } } }
+});
+
+const binsA = makeBins(latA, latEnd, binSize);
+const binsB = makeBins(latB, latEnd, binSize);
+const ctx3 = document.getElementById('chartLatDist');
+new Chart(ctx3, {
+  type: 'bar',
+  data: {
+    labels: binsA.labels,
+    datasets: [
+      { label: LATA, data: binsA.bins, backgroundColor: '#60a5fa60', borderColor: '#60a5fa', borderWidth: 1 },
+      { label: LATB, data: binsB.bins.concat(new Array(Math.max(0, binsA.bins.length - binsB.bins.length)).fill(0)), backgroundColor: '#a78bfa60', borderColor: '#a78bfa', borderWidth: 1 },
+    ]
+  },
+  options: { responsive:true, plugins:{ legend:{position:'bottom',labels:{padding:20}} }, scales:{ x:{ title:{display:true,text:'Latency (seconds)'} }, y:{ title:{display:true,text:'Questions'}, beginAtZero:true } } }
+});
+
+const qtypes = Object.keys(qtypeScoresA).sort();
+const ctx4 = document.getElementById('chartQtypeScore');
+new Chart(ctx4, {
+  type: 'bar',
+  data: {
+    labels: qtypes,
+    datasets: [
+      { label: LATA, data: qtypes.map(q=>qtypeScoresA[q]?.mean_score||0), backgroundColor: '#60a5fa80', borderColor: '#60a5fa', borderWidth: 1 },
+      { label: LATB, data: qtypes.map(q=>(qtypeScoresB[q]||qtypeScoresA[q])?.mean_score||0), backgroundColor: '#a78bfa80', borderColor: '#a78bfa', borderWidth: 1 },
+    ]
+  },
+  options: { responsive:true, plugins:{ legend:{position:'bottom',labels:{padding:20}} }, scales:{ y:{ min:0, max:1, title:{display:true,text:'Mean Judge Score'} } } }
+});
+
+const relData = {"new": {"count": 200, "hit_count": 0}, "exact": {"count": 200, "hit_count": 200}, "paraphrase": {"count": 100, "hit_count": 73}};
+const relCtx = document.getElementById('chartRelHit');
+new Chart(relCtx, {
+  type: 'bar',
+  data: {
+    labels: Object.keys(relData).sort(),
+    datasets: [
+      { label: 'Count', data: Object.keys(relData).sort().map(k=>relData[k].count), backgroundColor: '#334155', borderColor: '#475569', borderWidth: 1 },
+      { label: 'Hits', data: Object.keys(relData).sort().map(k=>relData[k].hit_count), backgroundColor: '#34d39980', borderColor: '#34d399', borderWidth: 1 },
+    ]
+  },
+  options: { responsive:true, plugins:{ legend:{position:'bottom',labels:{padding:20}} }, scales:{ y:{ title:{display:true,text:'Items'}, beginAtZero:true } } }
+});
+
+const ctxPie = document.getElementById('chartCostPie');
+new Chart(ctxPie, {
+  type: 'doughnut',
+  data: {
+    labels: ['Spent (generation)','Saved by cache'],
+    datasets: [{
+      data: [0.052138,0.056689],
+      backgroundColor: ['#60a5fa','#34d399'],
+      borderColor: '#0b0f19',
+      borderWidth: 2,
+    }]
+  },
+  options: { responsive:true, plugins:{ legend:{position:'bottom',labels:{padding:20}} } }
+});
+
+</script>
+
+<div class="section" style="text-align:center; padding-top: 16px;">
+  <a href="report.md" download class="btn primary" style="font-size:1rem; padding: 14px 32px;">
+    &#8681; Download Markdown Report
+  </a>
+</div>
+
+<footer>
+  CAG-Lab Benchmark Report &middot; nvidia/nemotron-nano-9b-v2
+</footer>
+</div>
+</body>
+</html>
