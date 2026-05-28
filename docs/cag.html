@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CAG — Cache-Augmented Generation | CAG-Lab</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
@@ -37,26 +37,32 @@
 <div class="section">
   <h2>Why This Works: The Research</h2>
 
-  <div style="background:var(--surface); border-radius:var(--radius); padding:28px; border:1px solid var(--border); text-align:center; margin-bottom:24px;">
-    <div style="font-size:3rem; font-weight:700; background:linear-gradient(135deg,var(--accent-1),var(--accent-2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent;">~31%</div>
-    <div style="font-size:1.05rem; color:var(--text); font-weight:600;">of real-world ChatGPT queries are repeated or semantically similar</div>
-    <div style="font-size:0.85rem; color:var(--dim); margin-top:4px;">Source: Gill et al., <em>MeanCache</em> (IEEE IPDPS '25) — Figure 1</div>
+  <div class="stat-block" style="margin-bottom:24px;">
+    <div class="big-num">~31%</div>
+    <div class="label">of real-world ChatGPT queries are repeated or semantically similar</div>
+    <div class="detail">Source: Gill et al., <em>MeanCache</em> (IEEE IPDPS '25) — Figure 1</div>
   </div>
 
   <p>Two recent papers provide the academic foundation for Cache-Augmented Generation:</p>
 
-  <div style="background:var(--surface); border-radius:var(--radius); padding:24px; border:1px solid var(--border); margin:16px 0;">
-    <h4 style="color:var(--text); margin-bottom:4px;">MeanCache: User-Centric Semantic Caching for LLM Web Services</h4>
-    <p style="color:var(--dim); font-size:0.88rem;">Gill, Elidrisi, Kalapatapu, Ahmed, Anwar, Gulzar — <em>IEEE IPDPS 2025</em></p>
-    <p style="color:var(--muted); font-size:0.9rem; margin-top:8px;">Analyzed real-world ChatGPT conversation logs and found that <strong>31% of queries are repeats or near-duplicates</strong> (their Figure 1). Introduced MeanCache, a federated-learning approach to semantic caching that achieves <strong>17% higher F-score</strong> and <strong>20% better precision</strong> than exact-match caching, while using <strong>83% less storage</strong>. Their work also encodes context chains to distinguish standalone from conversational queries — critical for avoiding false hits in multi-turn dialogues.</p>
-    <a href="https://arxiv.org/abs/2403.02694" target="_blank" rel="noopener" style="color:var(--accent-1); font-size:0.85rem; font-weight:600;">arXiv:2403.02694 &rarr;</a>
+  <div class="paper-ref">
+    <div class="ref-icon">&#128214;</div>
+    <div>
+      <h4>MeanCache: User-Centric Semantic Caching for LLM Web Services</h4>
+      <p>Gill, Elidrisi, Kalapatapu, Ahmed, Anwar, Gulzar — <em>IEEE IPDPS 2025</em></p>
+      <p>Analyzed real-world ChatGPT conversation logs and found that <strong>31% of queries are repeats or near-duplicates</strong> (their Figure 1). Introduced MeanCache, a federated-learning approach to semantic caching that achieves <strong>17% higher F-score</strong> and <strong>20% better precision</strong> than exact-match caching, while using <strong>83% less storage</strong>. Their work also encodes context chains to distinguish standalone from conversational queries — critical for avoiding false hits in multi-turn dialogues.</p>
+      <a class="ref-link" href="https://arxiv.org/abs/2403.02694" target="_blank" rel="noopener">arXiv:2403.02694 &rarr;</a>
+    </div>
   </div>
 
-  <div style="background:var(--surface); border-radius:var(--radius); padding:24px; border:1px solid var(--border); margin:16px 0;">
-    <h4 style="color:var(--text); margin-bottom:4px;">Don't Do RAG: When Cache-Augmented Generation is All You Need</h4>
-    <p style="color:var(--dim); font-size:0.88rem;">Chan, Chen, Cheng, Huang — <em>The Web Conference (WWW) 2025</em></p>
-    <p style="color:var(--muted); font-size:0.9rem; margin-top:8px;">Proposes CAG as a fundamental alternative to RAG for knowledge tasks with constrained document sets. By preloading all relevant resources into the LLM's extended context window and caching runtime parameters, CAG <strong>eliminates retrieval latency entirely</strong> and avoids document selection errors. Benchmarks show CAG matching or exceeding RAG quality on multiple datasets while being simpler to deploy.</p>
-    <a href="https://arxiv.org/abs/2412.15605" target="_blank" rel="noopener" style="color:var(--accent-1); font-size:0.85rem; font-weight:600;">arXiv:2412.15605 &rarr;</a>
+  <div class="paper-ref">
+    <div class="ref-icon">&#128214;</div>
+    <div>
+      <h4>Don't Do RAG: When Cache-Augmented Generation is All You Need</h4>
+      <p>Chan, Chen, Cheng, Huang — <em>The Web Conference (WWW) 2025</em></p>
+      <p>Proposes CAG as a fundamental alternative to RAG for knowledge tasks with constrained document sets. By preloading all relevant resources into the LLM's extended context window and caching runtime parameters, CAG <strong>eliminates retrieval latency entirely</strong> and avoids document selection errors. Benchmarks show CAG matching or exceeding RAG quality on multiple datasets while being simpler to deploy.</p>
+      <a class="ref-link" href="https://arxiv.org/abs/2412.15605" target="_blank" rel="noopener">arXiv:2412.15605 &rarr;</a>
+    </div>
   </div>
 
   <p style="margin-top:16px;">Our implementation follows the MeanCache architecture — embedding-based semantic matching with a configurable similarity threshold — adapted for a Redis-backed vector search backend rather than federated learning. The core insight is the same: when 3 out of 10 queries are repeats, a semantic cache pays for itself almost immediately.</p>
@@ -100,7 +106,7 @@
     <!-- Cached Answer -->
     <rect x="670" y="115" width="180" height="60" rx="12" fill="#1e293b" stroke="#34d399" stroke-width="1.5" filter="url(#shadow)"/>
     <text x="760" y="139" fill="#34d399" font-size="14" font-weight="600" text-anchor="middle">Cached Answer</text>
-    <text x="760" y="159" fill="#94a3b8" font-size="11" text-anchor="middle">Free &amp; instant (~0.2s)</text>
+    <text x="760" y="159" fill="#94a3b8" font-size="11" text-anchor="middle">Free &amp; instant (~0.5s)</text>
 
     <!-- Arrow MISS -> -->
     <line x1="600" y1="225" x2="660" y2="255" stroke="#f87171" stroke-width="2" marker-end="url(#ar)"/>
@@ -137,7 +143,7 @@
   embedding  &lt;512 float32 bytes&gt;
   answer     &lt;generated text&gt;
   sources    [1, 3]
-  model      gpt-4o-mini
+  model      nemotron-nano-9b-v2
   created_at 1716724800
   source_id  aws-001
   question_text &lt;original query&gt;
@@ -160,7 +166,7 @@ EXPIRE cache:&lt;uuid&gt; &lt;ttl_seconds&gt;</pre>
   <h3 style="margin-top:24px;">Decision Logic</h3>
   <pre class="code-block">similarity = 1.0 - cosine_distance
 if similarity &gt;= threshold AND not expired:
-    return HIT &rarr; cached answer (free, ~0.2s)
+    return HIT &rarr; cached answer (free, ~0.5s)
 else:
     return MISS &rarr; run full RAG + store result</pre>
 </div>
@@ -183,12 +189,12 @@ else:
     <div class="feature-item">
       <div class="icon">&#128176;</div>
       <h4>Cost Saved</h4>
-      <p>Generation cost avoided by serving answers from cache. Each hit saves ~$0.00046 in LLM costs.</p>
+      <p>Generation cost avoided by serving answers from cache. Each hit saves ~$0.00018 in LLM costs.</p>
     </div>
     <div class="feature-item">
       <div class="icon">&#9201;</div>
       <h4>Hit vs Miss Latency</h4>
-      <p>Cache hits complete in ~0.2s (embed + Redis KNN). Cache misses take ~4.3s (embed + retrieve + generate).</p>
+      <p>Cache hits complete in ~0.5s (embed + Redis KNN). Cache misses take ~5.6s (embed + retrieve + generate).</p>
     </div>
   </div>
 </div>
@@ -212,23 +218,23 @@ else:
   <div class="cards">
     <div class="card">
       <div class="label">Latency (p50)</div>
-      <div class="value green">-93%</div>
-      <div class="sub">0.26s vs 4.01s (semantic cache)</div>
+      <div class="value green">-89%</div>
+      <div class="sub">0.56s vs 5.06s (semantic cache)</div>
     </div>
     <div class="card">
       <div class="label">Cost per 1k Q</div>
-      <div class="value purple">-60%</div>
-      <div class="sub">$0.182 vs $0.455</div>
+      <div class="value purple">-53%</div>
+      <div class="sub">$0.104 vs $0.221</div>
     </div>
     <div class="card">
       <div class="label">Quality</div>
-      <div class="value blue">+5%</div>
-      <div class="sub">Judge score: 0.351 vs 0.333</div>
+      <div class="value blue">+6%</div>
+      <div class="sub">Judge score: 0.686 vs 0.650</div>
     </div>
     <div class="card">
       <div class="label">Cache Hit Rate</div>
-      <div class="value amber">60.6%</div>
-      <div class="sub">183 of 302 from cache; 3.3% false-positive</div>
+      <div class="value amber">54.6%</div>
+      <div class="sub">273 of 500 from cache; 0.0% false-positive</div>
     </div>
   </div>
   <p style="margin-top:16px; text-align:center;">

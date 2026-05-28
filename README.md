@@ -54,14 +54,14 @@ random vectors from Qdrant, extracted content, and used an LLM judge to generate
 1,000 benchmark questions directly from the indexed documents. Filtered to 200
 clean, substantive questions with balanced query types and difficulty levels.
 
-### Phase 5: CAG Optimization
+### Phase 5: Dataset Sharing
 
-Initial CAG experiments showed worse quality than RAG — the cache was serving
-wrong answers at the default 0.92 similarity threshold. Root cause: the workload
-generator shuffled repeats before originals, so 65% of cache lookups had no
-cached entry. Fixed ordering (new before repeat). Then raised the threshold to
-0.96 to eliminate false positives. Added disaster recovery: streaming JSONL
-writes, auto-resume from crash, live report regeneration every 10 records.
+Local Qdrant solved the internet-dependency problem but introduced a new one:
+the 89,221 vectors still required a Pinecone subscription to populate. **Exported
+the full vector collection to Parquet and published it on
+[HuggingFace Datasets](https://huggingface.co/datasets/mouadja/aws-docs)**.
+Anyone can now `python scripts/setup_vectordb.py` to download and restore the
+collection — no Pinecone, no API keys, just Docker + one command.
 
 ## What We Compare
 
@@ -104,7 +104,7 @@ writes, auto-resume from crash, live report regeneration every 10 records.
 | Layer | Technology |
 |---|---|
 | Embedding | OpenAI `text-embedding-3-small` (512d) |
-| Vector DB | Qdrant (local, Docker) / Pinecone (cloud) — env-switchable |
+| Vector DB | Qdrant (local, Docker) / Pinecone (cloud) — env-switchable. Vectors on [HuggingFace](https://huggingface.co/datasets/mouadja/aws-docs) |
 | Cache | Redis Stack (HNSW, M=64, EF_RUNTIME=300) |
 | LLM | Any OpenAI-compatible endpoint (OpenRouter, OpenAI, Anthropic, LMStudio, Ollama, vLLM) |
 | Judge | OpenRouter `openai/gpt-oss-120b:nitro` (separate model, avoids self-evaluation bias) |
@@ -131,7 +131,8 @@ cp .env.example .env
 
 # --- Option A: Internet-independent (recommended) ---
 $env:VECTOR_DB = "qdrant"
-python scripts/migrate_pinecone_to_qdrant.py --index aws-docs --force
+pip install pyarrow huggingface_hub
+python scripts/setup_vectordb.py --force    # downloads 89k vectors from HuggingFace
 
 # --- Option B: Use Pinecone cloud ---
 # $env:VECTOR_DB = "pinecone"  # default
@@ -167,7 +168,9 @@ cag-lab/
 ├── scripts/
 │   ├── generate_comparison_report.py
 │   ├── migrate_pinecone_to_qdrant.py
-│   └── rebuild_benchmark.py
+│   ├── rebuild_benchmark.py
+│   ├── setup_vectordb.py              # Download vectors from HuggingFace → Qdrant
+│   └── export_to_huggingface.py       # Export Qdrant/Pinecone → Parquet → HF Hub
 ├── src/
 │   └── cag_lab/
 │       ├── benchmark/       # Dataset, metrics, runner, workload
@@ -203,7 +206,9 @@ Quality improved from -1% vs RAG to +6%.
 Research must be reproducible offline. Cloud-only benchmarks can't be recreated
 by collaborators. Qdrant provides identical cosine search with zero external
 dependencies. The migration preserves every vector, and `VECTOR_DB` env switching
-enables cloud-vs-local latency A/B testing.
+enables cloud-vs-local latency A/B testing. The full 89,221-vector collection is
+published on [HuggingFace Datasets](https://huggingface.co/datasets/mouadja/aws-docs)
+so anyone can restore it with a single command — no Pinecone subscription required.
 
 ### Why judge models are separate
 
@@ -212,6 +217,11 @@ its own outputs. We use `openai/gpt-oss-120b:nitro` via OpenRouter for judging,
 routed through `JUDGE_API_KEY` to stay independent of the generation pipeline.
 
 ## Pinecone → Qdrant Migration
+
+> **New:** You no longer need Pinecone to populate Qdrant. Run
+> `python scripts/setup_vectordb.py` to download the pre-built collection from
+> [HuggingFace](https://huggingface.co/datasets/mouadja/aws-docs). The migration
+> script below is kept for users who have their own Pinecone index.
 
 ### What We Migrated
 
@@ -225,10 +235,10 @@ routed through `JUDGE_API_KEY` to stay independent of the generation pipeline.
 ### How It Works
 
 ```
-┌─────────────┐     list() / fetch()      ┌───────────┐     upsert()      ┌───────────┐
-│  Pinecone    │ ────────────────────────→ │  Migration │ ───────────────→ │  Qdrant   │
-│  cloud index │ ←──── vectors + metadata  │  script    │ ←──── UUIDs     │  (local)  │
-└─────────────┘                           └───────────┘                  └───────────┘
+┌─────────────┐     list() / fetch()     ┌───────────┐     upsert()     ┌───────────┐
+│   Pinecone  │ ───────────────────────→ │ Migration │ ───────────────→ │  Qdrant   │
+│ cloud index │ ←── vectors + metadata ─ │ script    │ ←──── UUIDs ──── │  (local)  │
+└─────────────┘                          └───────────┘                  └───────────┘
 ```
 
 1. **List** — Pinecone's `list(prefix="")` paginates through all 89,221 vector IDs
@@ -284,9 +294,9 @@ This is an active playground — here's what's done and what's coming:
 - [x] **Direct OpenAI client** — Replaced LiteLLM, clean provider-agnostic routing
 - [x] **Multi-provider LLMs** — OpenRouter, OpenAI, Anthropic, LMStudio, Ollama, vLLM
 - [x] **Dataset coherence** — Rebuilt 200 questions from the vector DB itself
-- [x] **CAG optimization** — Workload ordering fix, threshold 0.96, zero false positives
 - [x] **Disaster recovery** — Streaming JSONL, auto-resume, live reports every 10
 - [x] **Rich latency metrics** — p25/p50/p75/p95/p99/min/max/mean
+- [x] **Dataset sharing** — 89k vectors published to [HuggingFace Datasets](https://huggingface.co/datasets/mouadja/aws-docs), one-command restore
 - [ ] **Local SLMs** — Test with Ollama/LM Studio models for zero-API-cost benchmarks
 - [ ] **Long-context CAG** — Preload knowledge base into context, cache KV state
 - [ ] **Bigger benchmark** — Azure, GCP, Kubernetes documentation domains
@@ -294,15 +304,6 @@ This is an active playground — here's what's done and what's coming:
 - [ ] **Streaming mode** — Measure time-to-first-token
 - [ ] **Eviction policies** — LRU, LFU, score-based cache eviction
 - [ ] **Hybrid search** — Dense + sparse (BM25) retrieval
-
-## How It Works (CI/CD)
-
-Every push to `main` that touches `results/jsonl/`, `scripts/`, or `docs/` triggers a
-GitHub Action:
-
-1. Runs `scripts/generate_comparison_report.py --auto`
-2. Generates `docs/report.html` (Chart.js charts) and `docs/report.md`
-3. Deploys `docs/` to GitHub Pages at [mouadja02.github.io/cag-lab](https://mouadja02.github.io/cag-lab)
 
 ## License
 

@@ -6,6 +6,9 @@ build/
 .venv
 .env
 
+# Large data files (downloaded from HuggingFace)
+*.parquet
+
 AGENTS.md
 CLAUDE.md
 .cursorrules

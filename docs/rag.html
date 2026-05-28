@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RAG — Retrieval-Augmented Generation | CAG-Lab</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
@@ -78,7 +78,7 @@
 
     <!-- LLM -->
     <rect x="360" y="260" width="320" height="60" rx="12" fill="#1e293b" stroke="#334155" stroke-width="1.5" filter="url(#shadow)"/>
-    <text x="520" y="284" fill="#e2e8f0" font-size="14" font-weight="600" text-anchor="middle">LLM (GPT-4o-mini)</text>
+    <text x="520" y="284" fill="#e2e8f0" font-size="14" font-weight="600" text-anchor="middle">LLM (Nemotron Nano 9B)</text>
     <text x="520" y="304" fill="#94a3b8" font-size="11" text-anchor="middle">Prompt: system + chunks + question</text>
 
     <!-- Arrow 5 to answer -->
@@ -122,7 +122,7 @@
     <div class="step">
       <div class="step-num">4</div>
       <h4>LLM Generation</h4>
-      <p>GPT-4o-mini generates an answer using ONLY the provided chunks, citing sources</p>
+      <p>Nemotron Nano 9B generates an answer using ONLY the provided chunks, citing sources</p>
     </div>
     <div class="step-arrow">&rarr;</div>
     <div class="step">
@@ -135,27 +135,27 @@
 
 <div class="section">
   <h2>Cost Model</h2>
-  <p>Every question incurs the full pipeline cost — embedding call + Pinecone query + LLM generation + judge evaluation. At ~300 prompt tokens per retrieval context + the user question, plus variable completion tokens depending on answer length.</p>
+  <p>Every question incurs the full pipeline cost — embedding call + Pinecone query + LLM generation + judge evaluation. With Nemotron Nano 9B via OpenRouter ($0.30 input / $1.20 output per 1M tokens), costs are dramatically lower than frontier models.</p>
 
   <div class="cards">
     <div class="card">
       <div class="label">Embedding Cost</div>
-      <div class="value green">$0.00002</div>
+      <div class="value green">~$0.00</div>
       <div class="sub">text-embedding-3-small @ $0.02/1M tokens</div>
     </div>
     <div class="card">
       <div class="label">Generation Cost</div>
-      <div class="value blue">~$0.00046</div>
-      <div class="sub">GPT-4o-mini: $0.15 input + $0.60 output per 1M tokens</div>
+      <div class="value blue">~$0.00018</div>
+      <div class="sub">Nemotron Nano 9B: $0.30 input + $1.20 output per 1M tokens</div>
     </div>
     <div class="card">
       <div class="label">Judge Cost</div>
-      <div class="value purple">~$0.00013</div>
-      <div class="sub">Separate GPT-4o-mini call for correctness scoring</div>
+      <div class="value purple">~$0.00004</div>
+      <div class="sub">Separate Nemotron Nano 9B call for correctness scoring</div>
     </div>
     <div class="card">
       <div class="label">Per-Question Total</div>
-      <div class="value amber">~$0.00061</div>
+      <div class="value amber">~$0.00022</div>
       <div class="sub">Embedding + generation + judge combined</div>
     </div>
   </div>
@@ -172,12 +172,12 @@
     <div class="feature-item">
       <div class="icon">&#9201;</div>
       <h4>Latency is bounded by LLM</h4>
-      <p>p50 of ~4 seconds per question, dominated by LLM inference time. Pinecone retrieval is fast (~100ms), but generation takes 2-8 seconds.</p>
+      <p>p50 of ~5 seconds per question, dominated by LLM inference time. Pinecone retrieval is fast (~100ms), but generation takes 3-15 seconds.</p>
     </div>
     <div class="feature-item">
       <div class="icon">&#127919;</div>
       <h4>Quality depends on retrieval</h4>
-      <p>If the right chunk isn't in the top-K results, the LLM can't answer. Mean judge score of 0.333 reflects this — many questions require multi-hop reasoning.</p>
+      <p>If the right chunk isn't in the top-K results, the LLM can't answer. Mean judge score of 0.650 reflects this — some questions require multi-hop reasoning.</p>
     </div>
     <div class="feature-item">
       <div class="icon">&#128202;</div>

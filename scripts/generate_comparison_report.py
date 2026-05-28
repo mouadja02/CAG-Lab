@@ -240,50 +240,73 @@ def generate_html(
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CAG-Lab Benchmark Comparison</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
+:root {{
+  --bg: #0a0e1a; --surface: rgba(30,41,59,0.7); --surface-hover: rgba(38,51,72,0.8);
+  --border: rgba(51,65,85,0.6); --border-hover: rgba(129,140,248,0.4);
+  --text: #e2e8f0; --muted: #94a3b8; --dim: #64748b;
+  --accent-1: #818cf8; --accent-2: #c084fc; --accent-glow: rgba(129,140,248,0.15);
+  --green: #34d399; --blue: #60a5fa; --purple: #a78bfa; --amber: #fbbf24; --red: #f87171;
+  --radius: 12px; --shadow-glow: 0 0 20px var(--accent-glow);
+}}
+::selection {{ background: rgba(129,140,248,0.3); color: #fff; }}
+::-webkit-scrollbar {{ width:8px; }} ::-webkit-scrollbar-track {{ background:var(--bg); }}
+::-webkit-scrollbar-thumb {{ background:#334155; border-radius:4px; }}
 * {{ margin:0; padding:0; box-sizing:border-box; }}
-body {{ font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif; background:#0b0f19; color:#e2e8f0; line-height:1.6; }}
-.container {{ max-width:1200px; margin:0 auto; padding:40px 24px; }}
-header {{ text-align:center; margin-bottom:48px; }}
-header h1 {{ font-size:2.2rem; font-weight:700; background:linear-gradient(135deg,#818cf8,#c084fc); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }}
-header p {{ color:#94a3b8; margin-top:8px; font-size:0.95rem; }}
-.cards {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; margin-bottom:48px; }}
-.card {{ background:#1e293b; border-radius:12px; padding:24px; border:1px solid #334155; }}
-.card .label {{ font-size:0.8rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px; }}
-.card .value {{ font-size:2rem; font-weight:700; }}
-.card .value.green {{ color:#34d399; }}
-.card .value.blue {{ color:#60a5fa; }}
-.card .value.purple {{ color:#a78bfa; }}
-.card .value.amber {{ color:#fbbf24; }}
-.card .sub {{ font-size:0.8rem; color:#64748b; margin-top:4px; }}
-.section {{ margin-bottom:48px; }}
-.section h2 {{ font-size:1.4rem; font-weight:600; margin-bottom:20px; color:#e2e8f0; border-bottom:1px solid #334155; padding-bottom:8px; }}
-.chart-row {{ display:grid; grid-template-columns:1fr 1fr; gap:24px; }}
+html {{ scroll-behavior:smooth; }}
+body {{ font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif; background:var(--bg); color:var(--text); line-height:1.6; position:relative; overflow-x:hidden; }}
+body::before {{ content:''; position:fixed; inset:0; background:radial-gradient(ellipse 80% 50% at 50% -20%,rgba(129,140,248,0.08),transparent),radial-gradient(ellipse 60% 40% at 80% 50%,rgba(192,132,252,0.04),transparent); pointer-events:none; z-index:0; }}
+body::after {{ content:''; position:fixed; inset:0; background-image:radial-gradient(rgba(148,163,184,0.03) 1px,transparent 1px); background-size:24px 24px; pointer-events:none; z-index:0; }}
+.container {{ max-width:1200px; margin:0 auto; padding:40px 24px; position:relative; z-index:1; }}
+header {{ text-align:center; margin-bottom:56px; position:relative; }}
+header::before {{ content:''; position:absolute; top:-40px; left:50%; transform:translateX(-50%); width:500px; height:300px; background:radial-gradient(ellipse,rgba(129,140,248,0.1),transparent 70%); pointer-events:none; z-index:-1; }}
+header h1 {{ font-size:2.4rem; font-weight:700; letter-spacing:-0.03em; background:linear-gradient(135deg,var(--accent-1),var(--accent-2),var(--green)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }}
+header p {{ color:var(--muted); margin-top:10px; font-size:0.95rem; }}
+.cards {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; margin-bottom:32px; }}
+.card {{ background:var(--surface); backdrop-filter:blur(8px); border-radius:var(--radius); padding:24px; border:1px solid var(--border); transition:all .25s ease; position:relative; overflow:hidden; }}
+.card::before {{ content:''; position:absolute; inset:0; border-radius:var(--radius); background:linear-gradient(135deg,rgba(129,140,248,0.05),transparent 60%); opacity:0; transition:opacity .25s ease; }}
+.card:hover {{ border-color:var(--border-hover); transform:translateY(-2px); box-shadow:0 4px 12px rgba(0,0,0,0.4),var(--shadow-glow); }}
+.card:hover::before {{ opacity:1; }}
+.card .label {{ font-size:0.75rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px; font-weight:600; }}
+.card .value {{ font-size:2rem; font-weight:700; letter-spacing:-0.02em; }}
+.card .value.green {{ color:var(--green); }} .card .value.blue {{ color:var(--blue); }}
+.card .value.purple {{ color:var(--purple); }} .card .value.amber {{ color:var(--amber); }}
+.card .sub {{ font-size:0.8rem; color:var(--dim); margin-top:6px; line-height:1.5; }}
+.section {{ margin-bottom:56px; }}
+.section h2 {{ font-size:1.35rem; font-weight:600; margin-bottom:24px; color:var(--text); letter-spacing:-0.01em; border-bottom:1px solid var(--border); padding-bottom:10px; position:relative; }}
+.section h2::after {{ content:''; position:absolute; bottom:-1px; left:0; width:48px; height:2px; background:linear-gradient(90deg,var(--accent-1),var(--accent-2)); border-radius:1px; }}
+.chart-row {{ display:grid; grid-template-columns:1fr 1fr; gap:20px; }}
 @media(max-width:768px) {{ .chart-row {{ grid-template-columns:1fr; }} }}
-.chart-box {{ background:#1e293b; border-radius:12px; padding:24px; border:1px solid #334155; }}
-.chart-box h3 {{ font-size:0.95rem; color:#cbd5e1; margin-bottom:16px; text-align:center; }}
+.chart-box {{ background:var(--surface); backdrop-filter:blur(8px); border-radius:var(--radius); padding:24px; border:1px solid var(--border); transition:border-color .25s ease; }}
+.chart-box:hover {{ border-color:var(--border-hover); }}
+.chart-box h3 {{ font-size:0.9rem; color:var(--muted); margin-bottom:16px; text-align:center; font-weight:500; }}
 .chart-box canvas {{ max-height:320px; }}
-table {{ width:100%; border-collapse:collapse; background:#1e293b; border-radius:12px; overflow:hidden; border:1px solid #334155; }}
-th, td {{ padding:12px 16px; text-align:left; }}
-th {{ background:#0f172a; color:#94a3b8; font-weight:600; font-size:0.85rem; text-transform:uppercase; }}
-td {{ border-top:1px solid #334155; font-size:0.9rem; }}
-tr:hover td {{ background:#263348; }}
-.table-compare td:first-child {{ color:#94a3b8; width:40%; }}
+table {{ width:100%; border-collapse:collapse; background:var(--surface); backdrop-filter:blur(8px); border-radius:var(--radius); overflow:hidden; border:1px solid var(--border); }}
+th, td {{ padding:14px 18px; text-align:left; }}
+th {{ background:rgba(15,23,42,0.8); color:var(--muted); font-weight:600; font-size:0.8rem; text-transform:uppercase; letter-spacing:0.04em; }}
+td {{ border-top:1px solid var(--border); font-size:0.9rem; }}
+tr {{ transition:background .15s ease; }} tr:hover td {{ background:var(--surface-hover); }}
+.table-compare td:first-child {{ color:var(--muted); width:40%; }}
 .table-compare td:nth-child(2), .table-compare td:nth-child(3) {{ font-weight:600; }}
-.highlight {{ color:#34d399; }}
-.dim {{ color:#f87171; }}
-footer {{ text-align:center; color:#475569; font-size:0.8rem; margin-top:48px; padding-top:24px; border-top:1px solid #1e293b; }}
-.badge {{ display:inline-block; padding:2px 8px; border-radius:6px; font-size:0.75rem; font-weight:600; }}
-.badge.green {{ background:#064e3b; color:#34d399; }}
-.badge.blue {{ background:#1e3a5f; color:#60a5fa; }}
-.badge.purple {{ background:#3b0764; color:#a78bfa; }}
+.highlight {{ color:var(--green); }} .dim {{ color:var(--red); }}
+footer {{ text-align:center; color:var(--dim); font-size:0.8rem; margin-top:64px; padding-top:32px; border-top:1px solid var(--border); }}
+.badge {{ display:inline-block; padding:3px 10px; border-radius:6px; font-size:0.72rem; font-weight:600; letter-spacing:0.02em; }}
+.badge.green {{ background:rgba(6,78,59,0.6); color:var(--green); }}
+.badge.blue {{ background:rgba(30,58,95,0.6); color:var(--blue); }}
+.badge.purple {{ background:rgba(59,7,100,0.6); color:var(--purple); }}
 .full-width {{ grid-column:1/-1; }}
-.top-nav {{ position:sticky; top:0; z-index:100; background:rgba(11,15,25,.92); backdrop-filter:blur(12px); border-bottom:1px solid #334155; }}
-.top-nav-inner {{ max-width:1200px; margin:0 auto; padding:0 24px; display:flex; align-items:center; gap:24px; height:48px; }}
-.top-nav-inner a {{ color:#94a3b8; text-decoration:none; font-size:0.85rem; font-weight:500; }}
-.top-nav-inner a:hover {{ color:#e2e8f0; }}
-.top-nav-inner .brand {{ font-size:1.05rem; font-weight:700; background:linear-gradient(135deg,#818cf8,#c084fc); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }}
+.top-nav {{ position:sticky; top:0; z-index:100; background:rgba(10,14,26,0.85); backdrop-filter:blur(16px) saturate(180%); border-bottom:1px solid var(--border); }}
+.top-nav::after {{ content:''; position:absolute; bottom:-1px; left:0; right:0; height:1px; background:linear-gradient(90deg,transparent,var(--accent-1),var(--accent-2),transparent); opacity:0.4; }}
+.top-nav-inner {{ max-width:1200px; margin:0 auto; padding:0 24px; display:flex; align-items:center; gap:8px; height:56px; }}
+.top-nav-inner a {{ color:var(--muted); text-decoration:none; font-size:0.875rem; font-weight:500; padding:6px 14px; border-radius:8px; transition:all .2s ease; }}
+.top-nav-inner a:hover {{ color:var(--text); background:rgba(129,140,248,0.08); }}
+.top-nav-inner a.active {{ color:var(--text); background:rgba(129,140,248,0.1); }}
+.top-nav-inner .brand {{ font-size:1.15rem; font-weight:700; background:linear-gradient(135deg,var(--accent-1),var(--accent-2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; letter-spacing:-0.02em; margin-right:24px; padding:0; }}
+.btn {{ display:inline-flex; align-items:center; gap:8px; padding:10px 22px; border-radius:10px; font-size:0.875rem; font-weight:600; cursor:pointer; border:1px solid var(--border); background:var(--surface); color:var(--text); transition:all .2s ease; text-decoration:none; }}
+.btn:hover {{ border-color:var(--border-hover); background:var(--surface-hover); transform:translateY(-1px); color:var(--text); }}
+.btn.primary {{ background:linear-gradient(135deg,var(--accent-1),var(--accent-2)); border:none; color:#fff; box-shadow:0 2px 12px rgba(129,140,248,0.3); }}
+.btn.primary:hover {{ opacity:.92; transform:translateY(-2px); box-shadow:0 4px 20px rgba(129,140,248,0.4); }}
 </style>
 </head>
 <body>
@@ -292,7 +315,7 @@ footer {{ text-align:center; color:#475569; font-size:0.8rem; margin-top:48px; p
   <a href="index.html">Overview</a>
   <a href="rag.html">RAG</a>
   <a href="cag.html">CAG</a>
-  <a href="report.html" style="color:#e2e8f0;">Report</a>
+  <a href="report.html" class="active">Report</a>
 </div></div>
 <div class="container">
 <header>
@@ -471,8 +494,12 @@ const latA = {lat_a};
 const latB = {lat_b};
 
 Chart.defaults.color = '#94a3b8';
-Chart.defaults.borderColor = '#334155';
-Chart.defaults.font.family = 'Inter';
+Chart.defaults.borderColor = 'rgba(51,65,85,0.6)';
+Chart.defaults.font.family = "'Inter', -apple-system, sans-serif";
+Chart.defaults.font.weight = 500;
+Chart.defaults.plugins.legend.labels.usePointStyle = true;
+Chart.defaults.plugins.legend.labels.pointStyle = 'circle';
+Chart.defaults.plugins.legend.labels.padding = 20;
 
 // Adaptive bin size: use p95 of combined latencies to avoid long-tail distortion
 const _allLat = [...latA, ...latB].filter(v => v > 0).sort((a, b) => a - b);
@@ -502,11 +529,11 @@ new Chart(ctx1, {{
   data: {{
     labels: ['p50','p95'],
     datasets: [
-      {{ label: LATA, data: [{summary_a["latency_stats"]["p50"]:.3f},{summary_a["latency_stats"]["p95"]:.3f}], backgroundColor: '#60a5fa80', borderColor: '#60a5fa', borderWidth: 1 }},
-      {{ label: LATB, data: [{summary_b["latency_stats"]["p50"]:.3f},{summary_b["latency_stats"]["p95"]:.3f}], backgroundColor: '#a78bfa80', borderColor: '#a78bfa', borderWidth: 1 }},
+      {{ label: LATA, data: [{summary_a["latency_stats"]["p50"]:.3f},{summary_a["latency_stats"]["p95"]:.3f}], backgroundColor: 'rgba(96,165,250,0.5)', borderColor: '#60a5fa', borderWidth: 1.5, borderRadius: 6 }},
+      {{ label: LATB, data: [{summary_b["latency_stats"]["p50"]:.3f},{summary_b["latency_stats"]["p95"]:.3f}], backgroundColor: 'rgba(167,139,250,0.5)', borderColor: '#a78bfa', borderWidth: 1.5, borderRadius: 6 }},
     ]
   }},
-  options: {{ responsive:true, plugins:{{ legend:{{position:'bottom',labels:{{padding:20}}}} }}, scales:{{ y:{{ title:{{display:true,text:'Seconds'}}, beginAtZero:true }} }} }}
+  options: {{ responsive:true, plugins:{{ legend:{{position:'bottom'}} }}, scales:{{ y:{{ title:{{display:true,text:'Seconds',color:'#94a3b8'}}, beginAtZero:true, grid:{{color:'rgba(51,65,85,0.3)'}} }}, x:{{grid:{{display:false}}}} }} }}
 }});
 
 const ctx2 = document.getElementById('chartCost');
@@ -515,11 +542,11 @@ new Chart(ctx2, {{
   data: {{
     labels: ['Total Cost ($)','Cost/1k Q ($)'],
     datasets: [
-      {{ label: LATA, data: [{summary_a["total_cost"]:.6f},{summary_a["cost_per_1k"]:.6f}], backgroundColor: '#60a5fa80', borderColor: '#60a5fa', borderWidth: 1 }},
-      {{ label: LATB, data: [{summary_b["total_cost"]:.6f},{summary_b["cost_per_1k"]:.6f}], backgroundColor: '#a78bfa80', borderColor: '#a78bfa', borderWidth: 1 }},
+      {{ label: LATA, data: [{summary_a["total_cost"]:.6f},{summary_a["cost_per_1k"]:.6f}], backgroundColor: 'rgba(96,165,250,0.5)', borderColor: '#60a5fa', borderWidth: 1.5, borderRadius: 6 }},
+      {{ label: LATB, data: [{summary_b["total_cost"]:.6f},{summary_b["cost_per_1k"]:.6f}], backgroundColor: 'rgba(167,139,250,0.5)', borderColor: '#a78bfa', borderWidth: 1.5, borderRadius: 6 }},
     ]
   }},
-  options: {{ responsive:true, plugins:{{ legend:{{position:'bottom',labels:{{padding:20}}}} }}, scales:{{ y:{{ beginAtZero:true }} }} }}
+  options: {{ responsive:true, plugins:{{ legend:{{position:'bottom'}} }}, scales:{{ y:{{ beginAtZero:true, grid:{{color:'rgba(51,65,85,0.3)'}} }}, x:{{grid:{{display:false}}}} }} }}
 }});
 
 const binsA = makeBins(latA, latEnd, binSize);
@@ -530,11 +557,11 @@ new Chart(ctx3, {{
   data: {{
     labels: binsA.labels,
     datasets: [
-      {{ label: LATA, data: binsA.bins, backgroundColor: '#60a5fa60', borderColor: '#60a5fa', borderWidth: 1 }},
-      {{ label: LATB, data: binsB.bins.concat(new Array(Math.max(0, binsA.bins.length - binsB.bins.length)).fill(0)), backgroundColor: '#a78bfa60', borderColor: '#a78bfa', borderWidth: 1 }},
+      {{ label: LATA, data: binsA.bins, backgroundColor: 'rgba(96,165,250,0.35)', borderColor: '#60a5fa', borderWidth: 1.5, borderRadius: 4 }},
+      {{ label: LATB, data: binsB.bins.concat(new Array(Math.max(0, binsA.bins.length - binsB.bins.length)).fill(0)), backgroundColor: 'rgba(167,139,250,0.35)', borderColor: '#a78bfa', borderWidth: 1.5, borderRadius: 4 }},
     ]
   }},
-  options: {{ responsive:true, plugins:{{ legend:{{position:'bottom',labels:{{padding:20}}}} }}, scales:{{ x:{{ title:{{display:true,text:'Latency (seconds)'}} }}, y:{{ title:{{display:true,text:'Questions'}}, beginAtZero:true }} }} }}
+  options: {{ responsive:true, plugins:{{ legend:{{position:'bottom'}} }}, scales:{{ x:{{ title:{{display:true,text:'Latency (seconds)',color:'#94a3b8'}}, grid:{{display:false}} }}, y:{{ title:{{display:true,text:'Questions',color:'#94a3b8'}}, beginAtZero:true, grid:{{color:'rgba(51,65,85,0.3)'}} }} }} }}
 }});
 
 const qtypes = Object.keys(qtypeScoresA).sort();
@@ -544,11 +571,11 @@ new Chart(ctx4, {{
   data: {{
     labels: qtypes,
     datasets: [
-      {{ label: LATA, data: qtypes.map(q=>qtypeScoresA[q]?.mean_score||0), backgroundColor: '#60a5fa80', borderColor: '#60a5fa', borderWidth: 1 }},
-      {{ label: LATB, data: qtypes.map(q=>(qtypeScoresB[q]||qtypeScoresA[q])?.mean_score||0), backgroundColor: '#a78bfa80', borderColor: '#a78bfa', borderWidth: 1 }},
+      {{ label: LATA, data: qtypes.map(q=>qtypeScoresA[q]?.mean_score||0), backgroundColor: 'rgba(96,165,250,0.5)', borderColor: '#60a5fa', borderWidth: 1.5, borderRadius: 6 }},
+      {{ label: LATB, data: qtypes.map(q=>(qtypeScoresB[q]||qtypeScoresA[q])?.mean_score||0), backgroundColor: 'rgba(167,139,250,0.5)', borderColor: '#a78bfa', borderWidth: 1.5, borderRadius: 6 }},
     ]
   }},
-  options: {{ responsive:true, plugins:{{ legend:{{position:'bottom',labels:{{padding:20}}}} }}, scales:{{ y:{{ min:0, max:1, title:{{display:true,text:'Mean Judge Score'}} }} }} }}
+  options: {{ responsive:true, plugins:{{ legend:{{position:'bottom'}} }}, scales:{{ y:{{ min:0, max:1, title:{{display:true,text:'Mean Judge Score',color:'#94a3b8'}}, grid:{{color:'rgba(51,65,85,0.3)'}} }}, x:{{grid:{{display:false}}}} }} }}
 }});
 """
 
@@ -561,11 +588,11 @@ new Chart(relCtx, {{
   data: {{
     labels: Object.keys(relData).sort(),
     datasets: [
-      {{ label: 'Count', data: Object.keys(relData).sort().map(k=>relData[k].count), backgroundColor: '#334155', borderColor: '#475569', borderWidth: 1 }},
-      {{ label: 'Hits', data: Object.keys(relData).sort().map(k=>relData[k].hit_count), backgroundColor: '#34d39980', borderColor: '#34d399', borderWidth: 1 }},
+      {{ label: 'Count', data: Object.keys(relData).sort().map(k=>relData[k].count), backgroundColor: 'rgba(51,65,85,0.6)', borderColor: '#475569', borderWidth: 1.5, borderRadius: 6 }},
+      {{ label: 'Hits', data: Object.keys(relData).sort().map(k=>relData[k].hit_count), backgroundColor: 'rgba(52,211,153,0.5)', borderColor: '#34d399', borderWidth: 1.5, borderRadius: 6 }},
     ]
   }},
-  options: {{ responsive:true, plugins:{{ legend:{{position:'bottom',labels:{{padding:20}}}} }}, scales:{{ y:{{ title:{{display:true,text:'Items'}}, beginAtZero:true }} }} }}
+  options: {{ responsive:true, plugins:{{ legend:{{position:'bottom'}} }}, scales:{{ y:{{ title:{{display:true,text:'Items',color:'#94a3b8'}}, beginAtZero:true, grid:{{color:'rgba(51,65,85,0.3)'}} }}, x:{{grid:{{display:false}}}} }} }}
 }});
 
 const ctxPie = document.getElementById('chartCostPie');
@@ -575,20 +602,21 @@ new Chart(ctxPie, {{
     labels: ['Spent (generation)','Saved by cache'],
     datasets: [{{
       data: [{summary_b["total_cost"]:.6f},{summary_b["cache"]["cost_saved"]:.6f}],
-      backgroundColor: ['#60a5fa','#34d399'],
-      borderColor: '#0b0f19',
-      borderWidth: 2,
+      backgroundColor: ['rgba(96,165,250,0.8)','rgba(52,211,153,0.8)'],
+      borderColor: 'rgba(10,14,26,0.9)',
+      borderWidth: 3,
+      hoverOffset: 8,
     }}]
   }},
-  options: {{ responsive:true, plugins:{{ legend:{{position:'bottom',labels:{{padding:20}}}} }} }}
+  options: {{ responsive:true, plugins:{{ legend:{{position:'bottom'}} }} }}
 }});
 """
 
     html += f"""
 </script>
 
-<div class="section" style="text-align:center; padding-top: 16px;">
-  <a href="report.md" download class="btn primary" style="font-size:1rem; padding: 14px 32px;">
+<div class="section" style="text-align:center; padding-top:16px;">
+  <a href="report.md" download class="btn primary" style="font-size:1rem; padding:14px 32px;">
     &#8681; Download Markdown Report
   </a>
 </div>
