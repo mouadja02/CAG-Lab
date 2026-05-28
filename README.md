@@ -4,7 +4,7 @@ A **research playground** benchmarking Retrieval-Augmented Generation (RAG)
 against Cache-Augmented Generation (CAG) on real AWS documentation queries.
 Built from curiosity — turned into a shareable proof-of-concept.
 
-> **Live dashboard:** [mouadja02.github.io/cag-lab](https://mouadja02.github.io/cag-lab)
+> **Live dashboard:** [mouadja02.github.io/cag-lab](https://mouadja02.github.io/CAG-Lab/)
 
 ## Why This Exists
 
@@ -97,7 +97,7 @@ collection — no Pinecone, no API keys, just Docker + one command.
 > **CAG beats RAG on every dimension**: higher quality (+6%), lower cost (-53%),
 > dramatically lower latency (-89%). Zero false positives at threshold 0.96.
 > Full interactive charts and per-query-type breakdown on the
-> [dashboard](https://mouadja02.github.io/cag-lab/report.html).
+> [dashboard](https://mouadja02.github.io/CAG-Lab/report.html).
 
 ## Tech Stack
 
