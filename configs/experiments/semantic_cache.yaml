@@ -4,7 +4,7 @@ index: aws-docs
 model: nvidia/nemotron-nano-9b-v2
 top_k: 5
 judge_model: openrouter/openai/gpt-oss-120b:nitro
-cache_threshold: 0.92
+cache_threshold: 0.96
 cache_ttl_seconds: 3600
 workload:
   repeated_query_rate: 0.4

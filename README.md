@@ -1,65 +1,67 @@
 # CAG-Lab
 
-A **personal learning playground** for benchmarking Retrieval-Augmented Generation (RAG)
-against Cache-Augmented Generation (CAG) on real-world AWS documentation queries.
-I built this to satisfy my own curiosity — but the results turned out to be worth sharing.
+A **research playground** benchmarking Retrieval-Augmented Generation (RAG)
+against Cache-Augmented Generation (CAG) on real AWS documentation queries.
+Built from curiosity — turned into a shareable proof-of-concept.
 
 > **Live dashboard:** [mouadja02.github.io/cag-lab](https://mouadja02.github.io/cag-lab)
 
 ## Why This Exists
 
-I kept seeing signals converge — a [YouTube video](https://youtu.be/QA3h4H5jqJw), a
-[couple](https://x.com/akshay_pachaar/status/2056714042455343160)
-[of](https://x.com/techNmak/status/2006727285223886937)
-posts, and two
+I kept seeing signals converge — a [YouTube video](https://youtu.be/QA3h4H5jqJw),
+[posts](https://x.com/techNmak/status/2006727285223886937), and two
 [papers](https://arxiv.org/abs/2412.15605)
 ([MeanCache](https://arxiv.org/abs/2403.02694), [Don't Do RAG](https://arxiv.org/abs/2412.15605))
 — all pointing at the same idea: **put a semantic cache between retrieval and
-generation**. As a system architect, this looks exactly like the pattern we use every
-day — Redis or Memcached between an app server and PostgreSQL. Can't we do the same
-for LLM pipelines?
+generation**. As a system architect, this looks exactly like the pattern we use
+every day — Redis or Memcached between an app server and PostgreSQL. Can't we
+do the same for LLM pipelines?
 
-This repo is my sandbox to test that hypothesis rigorously: same dataset, same model,
-side-by-side comparison, every metric tracked.
+This repo is my sandbox to test that hypothesis rigorously: same dataset, same
+model, side-by-side comparison, every metric tracked.
 
-## Why GPT-4o-mini?
+## The Journey
 
-We deliberately use **gpt-4o-mini**, the smallest and cheapest OpenAI model. The point
-is *not* to see how well an LLM can answer AWS questions from its training data.
-A frontier model like GPT-4o or Claude would ace many of these questions from general
-knowledge alone, making retrieval irrelevant.
+### Phase 1: Baseline (Pinecone + LiteLLM + GPT-4o-mini)
 
-We want a model that **must rely on the retrieved chunks** to answer correctly.
-This way, the benchmark actually measures *retrieval quality* — not model memorization.
+Started with a cloud-only pipeline: Pinecone for vector search, LiteLLM for
+model routing, GPT-4o-mini for generation. 120 hand-written AWS questions. This
+established the benchmark framework — YAML configs, run_experiment runner, JSONL
+outputs, markdown reports, and a GitHub Pages dashboard.
 
-## Why Qdrant? Why Migrate from Pinecone?
+### Phase 2: Internet-Independent Research
 
-The original pipeline relied on **Pinecone** (cloud-hosted vector DB) for retrieval
-and **Redis Stack** for the semantic cache. This meant every experiment required:
+Every experiment required a Pinecone subscription and stable internet. This broke
+reproducibility — nobody else could clone and run. **Migrated 89,221 vectors from
+Pinecone to Qdrant** running locally in Docker. Wrote a migration script that
+preserves every vector, handles Pinecone's backslash-path IDs, and supports
+`VECTOR_DB=qdrant` / `VECTOR_DB=pinecone` switching for A/B comparison.
 
-- A stable internet connection
-- A Pinecone subscription
-- Network latency between the local machine and Pinecone's servers
+### Phase 3: Multi-Provider LLM Support
 
-**Research should be reproducible offline.** A benchmark that depends on a cloud
-service isn't fully reproducible — someone else cloning the repo can't run the exact
-same experiments without their own Pinecone credentials and an index populated with
-the same vectors.
+Replaced LiteLLM's noisy provider-discovery with a direct `openai.OpenAI` client.
+Added env-var-based provider switching (`LLM_API_BASE`, `LLM_API_KEY`,
+`EMBED_API_BASE`) supporting OpenRouter, OpenAI direct, Anthropic, LMStudio,
+Ollama, vLLM — any OpenAI-compatible endpoint. Added `JUDGE_API_KEY` for
+separate judge-model routing.
 
-We migrated the retrieval layer from Pinecone to **Qdrant**, an open-source vector
-database that runs locally via Docker, for three reasons:
+### Phase 4: Dataset Coherence
 
-1. **Zero-dependency testing** — Both retrieval (Qdrant) and caching (Redis) now run
-   locally. No cloud services, no API quotas, no network flakiness.
-2. **Reproducible science** — Anyone can clone the repo, run `docker compose up -d`,
-   `python scripts/migrate_pinecone_to_qdrant.py --force`, and get identical results.
-3. **Same capabilities** — Qdrant supports the same cosine-distance vector search with
-   512-dimensional embeddings as Pinecone, matching our `text-embedding-3-small`
-   configuration exactly.
+The original 120 questions were hand-written against a different knowledge base.
+The local model answered "I cannot answer" on most questions because retrieved
+chunks didn't match. **Rebuilt the dataset from the vector DB itself**: sampled
+random vectors from Qdrant, extracted content, and used an LLM judge to generate
+1,000 benchmark questions directly from the indexed documents. Filtered to 200
+clean, substantive questions with balanced query types and difficulty levels.
 
-The original Pinecone path remains available — set `VECTOR_DB=pinecone` (the default)
-to use the cloud index. The migration script preserves every vector and its metadata,
-allowing seamless switching between backends for A/B comparison of retrieval latency.
+### Phase 5: CAG Optimization
+
+Initial CAG experiments showed worse quality than RAG — the cache was serving
+wrong answers at the default 0.92 similarity threshold. Root cause: the workload
+generator shuffled repeats before originals, so 65% of cache lookups had no
+cached entry. Fixed ordering (new before repeat). Then raised the threshold to
+0.96 to eliminate false positives. Added disaster recovery: streaming JSONL
+writes, auto-resume from crash, live report regeneration every 10 records.
 
 ## What We Compare
 
@@ -68,30 +70,46 @@ allowing seamless switching between backends for A/B comparison of retrieval lat
 | **Classic RAG** | Embed query → retrieve top-K from vector DB → generate with LLM |
 | **Semantic Cache (CAG)** | Embed query → Redis vector search → HIT: return cached / MISS: run RAG + store |
 
-Coming next: long-context CAG (preload all docs into the context window + cache KV state).
-
 ## What We Measure
 
 - **Answer quality** — LLM judge (GPT-4o-mini) scores correctness 0/1 per question
-- **Latency** — p50/p95 wall-clock time per question
-- **Cost** — token-based pricing from `configs/models/pricing.yaml`
+- **Latency** — p25/p50/p75/p95/p99/min/max/mean wall-clock per question
+- **Cost** — token-based pricing from `configs/models/pricing.yaml`, with missing-model warnings
 - **Citation rate** — does the answer cite its sources?
-- **Cache hit rate** — fraction served from Redis (CAG only)
-- **False-positive rate** — cache hits where the source question was actually different
+- **Cache hit rate** — fraction served from Redis (CAG only), by relationship
+- **False-positive rate** — cache hits where the source question was different
 - **Cost saved** — generation cost avoided by caching (CAG only)
+- **Retrieval relevance** — LLM judge scores whether retrieved chunks contain the answer
 
 ## Latest Results
 
+> **200 questions, 500 workload items, threshold 0.96, model nvidia/nemotron-nano-9b-v2**
+
 | Metric | RAG Baseline | Semantic Cache | Improvement |
 |---|---|---|---|
-| Mean judge score | 0.333 | 0.351 | +5% |
-| p50 latency | 4.01 s | 0.26 s | **−93%** |
-| Cost per 1k Qs | $0.455 | $0.182 | **−60%** |
-| Cache hit rate | — | 60.6% | — |
-| False-positive rate | — | 3.3% | — |
+| Mean judge score | 0.650 | **0.686** | **+6%** |
+| Citation rate | 87.5% | 90.6% | +3pp |
+| p50 latency | 5.06 s | **0.56 s** | **−89%** |
+| Cost per 1k Qs | $0.221 | **$0.104** | **−53%** |
+| Cache hit rate | — | 54.6% | — |
+| False-positive rate | — | **0.0%** | — |
 
+> **CAG beats RAG on every dimension**: higher quality (+6%), lower cost (-53%),
+> dramatically lower latency (-89%). Zero false positives at threshold 0.96.
 > Full interactive charts and per-query-type breakdown on the
 > [dashboard](https://mouadja02.github.io/cag-lab/report.html).
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Embedding | OpenAI `text-embedding-3-small` (512d) |
+| Vector DB | Qdrant (local, Docker) / Pinecone (cloud) — env-switchable |
+| Cache | Redis Stack (HNSW, M=64, EF_RUNTIME=300) |
+| LLM | Any OpenAI-compatible endpoint (OpenRouter, OpenAI, Anthropic, LMStudio, Ollama, vLLM) |
+| Judge | OpenRouter `openai/gpt-oss-120b:nitro` (separate model, avoids self-evaluation bias) |
+| CLI | Typer |
+| Dashboard | Vanilla HTML/CSS + Chart.js |
 
 ## Quick Start
 
@@ -111,21 +129,20 @@ docker compose up -d
 # Configure — copy .env.example to .env and fill in your API keys
 cp .env.example .env
 
-# --- Option A: Internet-independent (recommended for reproducibility) ---
-# Set Qdrant as vector backend and migrate the Pinecone index locally
-$env:VECTOR_DB = "qdrant"   # Windows; use export on macOS/Linux
+# --- Option A: Internet-independent (recommended) ---
+$env:VECTOR_DB = "qdrant"
 python scripts/migrate_pinecone_to_qdrant.py --index aws-docs --force
 
-# --- Option B: Use Pinecone cloud (requires PINECONE_API_KEY) ---
-# $env:VECTOR_DB = "pinecone"  # this is the default
+# --- Option B: Use Pinecone cloud ---
+# $env:VECTOR_DB = "pinecone"  # default
 
-# Run the RAG baseline (120 questions)
+# Run the RAG baseline (200 questions)
 cag-lab run --config configs/experiments/rag_baseline.yaml
 
-# Run with semantic cache (302 workload items)
+# Run with semantic cache (500 workload items)
 cag-lab run --config configs/experiments/semantic_cache.yaml
 
-# Generate the comparison report
+# Generate comparison report
 python scripts/generate_comparison_report.py --auto
 ```
 
@@ -134,61 +151,76 @@ python scripts/generate_comparison_report.py --auto
 ```
 cag-lab/
 ├── configs/
-│   ├── experiments/        # YAML experiment definitions
-│   └── models/             # Pricing table (editable)
+│   ├── experiments/         # YAML experiment definitions
+│   └── models/              # Pricing table (editable)
 ├── data/
-│   └── benchmark_sets/     # JSONL Q&A datasets
-├── docs/                   # GitHub Pages dashboard
-│   ├── index.html          # Landing page
-│   ├── rag.html            # RAG deep-dive + SVG architecture
-│   ├── cag.html            # CAG deep-dive + research citations
-│   ├── report.html         # Auto-generated comparison (charts)
-│   └── report.md           # Downloadable markdown report
+│   └── benchmark_sets/      # JSONL Q&A datasets
+├── docs/                    # GitHub Pages dashboard
+│   ├── index.html           # Landing page
+│   ├── rag.html             # RAG deep-dive + SVG architecture
+│   ├── cag.html             # CAG deep-dive + research citations
+│   ├── report.html          # Auto-generated comparison (Chart.js)
+│   └── report.md            # Downloadable markdown report
 ├── results/
-│   ├── jsonl/              # Raw experiment results (committed)
-│   └── reports/            # Per-experiment markdown reports
+│   ├── jsonl/               # Raw experiment results
+│   └── reports/             # Per-experiment markdown reports
 ├── scripts/
 │   ├── generate_comparison_report.py
-│   └── migrate_pinecone_to_qdrant.py  # Pinecone → Qdrant migration
+│   ├── migrate_pinecone_to_qdrant.py
+│   └── rebuild_benchmark.py
 ├── src/
 │   └── cag_lab/
-│       ├── benchmark/      # Dataset, metrics, runner, workload
-│       ├── cache/          # Redis vector search semantic cache
-│       ├── generation/     # LLM client + answer generator
-│       └── retrieval/      # Qdrant & Pinecone retrievers (VECTOR_DB env switch)
-├── docker-compose.yml      # Redis Stack + Qdrant
+│       ├── benchmark/       # Dataset, metrics, runner, workload
+│       ├── cache/           # Redis HNSW semantic cache
+│       ├── embeddings.py    # Shared embedding client
+│       ├── generation/      # LLM client + answer generator
+│       └── retrieval/       # Qdrant & Pinecone retrievers
+├── docker-compose.yml       # Redis Stack + Qdrant
 └── pyproject.toml
 ```
 
-## Tech Stack
+## Design Decisions
 
-| Layer | Technology |
-|---|---|
-| Embedding | OpenAI `text-embedding-3-small` (512d) |
-| Vector DB | Qdrant (default, local) / Pinecone (`aws-docs` index, cloud) |
-| Cache | Redis Stack (HNSW, cosine distance) |
-| LLM | GPT-4o-mini via OpenAI client (OpenRouter-compatible) |
-| Judge | GPT-4o-mini |
-| CLI | Typer |
-| Dashboard | Vanilla HTML/CSS + Chart.js |
+### Why GPT-4o-mini is a deliberate choice (no longer used, but the reasoning stands)
+
+We deliberately used the smallest model early on. The point is not to see how well
+an LLM can answer from training data — a frontier model would ace questions
+without retrieval. We want a model that **must rely on retrieved chunks** so the
+benchmark measures retrieval quality, not model memorization.
+
+Current experiments use `nvidia/nemotron-nano-9b-v2` via OpenRouter — a 9B model
+that balances reasoning with cost.
+
+### Why threshold 0.96
+
+At 0.92 (default), the semantic cache allowed borderline hits that served wrong
+answers for troubleshooting and multi-hop questions. Raising to 0.96 eliminated
+false positives entirely (0.0%) while maintaining 73% paraphrase hit rate.
+Quality improved from -1% vs RAG to +6%.
+
+### Why Qdrant over Pinecone
+
+Research must be reproducible offline. Cloud-only benchmarks can't be recreated
+by collaborators. Qdrant provides identical cosine search with zero external
+dependencies. The migration preserves every vector, and `VECTOR_DB` env switching
+enables cloud-vs-local latency A/B testing.
+
+### Why judge models are separate
+
+Self-evaluation bias: if the same model generates and judges answers, it favors
+its own outputs. We use `openai/gpt-oss-120b:nitro` via OpenRouter for judging,
+routed through `JUDGE_API_KEY` to stay independent of the generation pipeline.
 
 ## Pinecone → Qdrant Migration
-
-### Motivation
-
-Before this migration, every experiment required an active Pinecone cloud subscription
-and a stable internet connection. This violated a core principle of reproducible
-research: **anyone cloning the repo should be able to reproduce the exact same results**
-without signing up for cloud services.
 
 ### What We Migrated
 
 | From | To |
 |---|---|
-| **Pinecone** (cloud, 89,221 vectors) | **Qdrant** (local, Docker) |
+| Pinecone (cloud, 89,221 vectors) | Qdrant (local, Docker) |
 | 512-dim `aws-docs` index | 512-dim `aws-docs` collection |
-| Backslash path IDs (`documents\AWS-...`) | Deterministic UUIDs (`uuid5` from original ID) |
-| Metadata: `content`, `filePath`, `chunkIndex`, etc. | Exact copy (plus `_pinecone_id` for traceability) |
+| Backslash path IDs | Deterministic UUIDs (uuid5 from original) |
+| Metadata: content, filePath, chunkIndex, etc. | Exact copy + `_pinecone_id` |
 
 ### How It Works
 
@@ -200,68 +232,77 @@ without signing up for cloud services.
 ```
 
 1. **List** — Pinecone's `list(prefix="")` paginates through all 89,221 vector IDs
-   in batches
-2. **Fetch** — Each batch of IDs is fetched with `index.fetch(ids=...)` to retrieve
-   the full 512-dim embedding vectors and metadata payloads
-3. **Transform IDs** — Pinecone uses Windows-style file paths as IDs (e.g.
-   `documents\AWS-Kinesis\...`), which Qdrant rejects. We generate deterministic
-   UUIDs via `uuid.uuid5(uuid.NAMESPACE_URL, original_id)` and store the original
-   ID as `_pinecone_id` in the payload
-4. **Upsert** — All 89,221 points are uploaded to a local Qdrant collection with
-   cosine-distance vector index, matching the original Pinecone configuration
+2. **Fetch** — Each batch retrieved with full embeddings and metadata
+3. **Transform IDs** — Pinecone's path-style IDs rejected by Qdrant → deterministic UUIDs
+4. **Upsert** — All points uploaded to local Qdrant with cosine-distance HNSW index
 
-### Switching Between Backends
-
-The retriever is backend-agnostic. Set the `VECTOR_DB` environment variable:
+### Switching Backends
 
 ```bash
-# Use local Qdrant (default for offline experiments)
-export VECTOR_DB=qdrant
-
-# Use Pinecone cloud (original backend)
-export VECTOR_DB=pinecone  # or leave unset (this is the default)
+export VECTOR_DB=qdrant   # local
+export VECTOR_DB=pinecone  # cloud (default)
 ```
 
-Both backends expose the identical `Chunk` and `Retriever` interface — the only
-difference is which Docker container the vectors live in. This also lets us measure
-retrieval latency differences between local and cloud vector search in future
-experiments.
+## Provider Configuration
+
+The LLM and embedding endpoints are fully configurable via `.env`:
+
+```bash
+# OpenRouter (default)
+LLM_API_BASE=https://openrouter.ai/api/v1
+LLM_API_KEY=sk-or-v1-...
+
+# OpenAI direct
+LLM_API_BASE=https://api.openai.com/v1
+LLM_API_KEY=sk-...
+
+# Anthropic (OpenAI-compatible endpoint)
+LLM_API_BASE=https://api.anthropic.com/v1
+LLM_API_KEY=sk-ant-...
+
+# Local LLM (LMStudio / Ollama / vLLM)
+LLM_API_BASE=http://localhost:1234/v1
+LLM_API_KEY=not-needed
+LLM_MODEL=local-model
+
+# Judge model (separate API key for bias avoidance)
+JUDGE_API_KEY=sk-or-v1-...
+JUDGE_MODEL=openrouter/openai/gpt-oss-120b:nitro
+
+# Embedding (OpenAI text-embedding-3-small at 512d)
+EMBED_API_BASE=https://api.openai.com/v1
+EMBED_API_KEY=sk-...
+EMBED_MODEL=text-embedding-3-small
+EMBED_DIMENSIONS=512
+```
 
 ## Roadmap
 
-This is an active playground — here's what's coming:
+This is an active playground — here's what's done and what's coming:
 
-- [x] **Local vector DB** — Replaced Pinecone cloud with Qdrant (Docker) for
-  internet-independent benchmarking. VECTOR_DB env switch for A/B comparison.
-- [x] **Direct OpenAI client** — Replaced LiteLLM with native `openai.OpenAI` pointing
-  at OpenRouter, eliminating noisy provider-discovery warnings.
-- [ ] **Local SLMs** — Test with Ollama/LM Studio models (Llama, Mistral, Phi) to
-  eliminate API costs and measure on-device performance
-- [ ] **Long-context CAG** — Preload the entire knowledge base into the context window,
-  cache KV state, skip retrieval entirely (per Don't Do RAG paper)
-- [ ] **Bigger benchmark** — Expand the dataset beyond 120 AWS questions; add Azure,
-  GCP, and Kubernetes documentation domains
-- [ ] **More query types** — Add conversational multi-turn, contradictory questions,
-  adversarial queries
-- [ ] **Different embedding models** — Compare OpenAI vs Cohere vs open-source
-  embeddings on retrieval quality
-- [ ] **Multi-model comparison** — GPT-4o, Claude, Gemini side-by-side with the same
-  retrieval pipeline
-- [ ] **Cost-tracking dashboard** — Real-time cost monitoring per experiment run
-- [ ] **Streaming mode** — Measure time-to-first-token alongside full answer latency
-- [ ] **Eviction policies** — LRU, LFU, and score-based cache eviction strategies
-- [ ] **Hybrid search** — Dense + sparse (BM25) retrieval and caching
+- [x] **Local vector DB** — Qdrant (Docker) replacing Pinecone cloud
+- [x] **Direct OpenAI client** — Replaced LiteLLM, clean provider-agnostic routing
+- [x] **Multi-provider LLMs** — OpenRouter, OpenAI, Anthropic, LMStudio, Ollama, vLLM
+- [x] **Dataset coherence** — Rebuilt 200 questions from the vector DB itself
+- [x] **CAG optimization** — Workload ordering fix, threshold 0.96, zero false positives
+- [x] **Disaster recovery** — Streaming JSONL, auto-resume, live reports every 10
+- [x] **Rich latency metrics** — p25/p50/p75/p95/p99/min/max/mean
+- [ ] **Local SLMs** — Test with Ollama/LM Studio models for zero-API-cost benchmarks
+- [ ] **Long-context CAG** — Preload knowledge base into context, cache KV state
+- [ ] **Bigger benchmark** — Azure, GCP, Kubernetes documentation domains
+- [ ] **Multi-model comparison** — GPT-4o, Claude, Gemini side-by-side
+- [ ] **Streaming mode** — Measure time-to-first-token
+- [ ] **Eviction policies** — LRU, LFU, score-based cache eviction
+- [ ] **Hybrid search** — Dense + sparse (BM25) retrieval
 
 ## How It Works (CI/CD)
 
 Every push to `main` that touches `results/jsonl/`, `scripts/`, or `docs/` triggers a
 GitHub Action:
 
-1. Runs `scripts/generate_comparison_report.py --auto` to discover the latest two
-   experiment JSONL files
-2. Generates `docs/report.html` (interactive charts) and `docs/report.md`
-3. Deploys the `docs/` directory to GitHub Pages at
-   [mouadja02.github.io/cag-lab](https://mouadja02.github.io/cag-lab)
+1. Runs `scripts/generate_comparison_report.py --auto`
+2. Generates `docs/report.html` (Chart.js charts) and `docs/report.md`
+3. Deploys `docs/` to GitHub Pages at [mouadja02.github.io/cag-lab](https://mouadja02.github.io/cag-lab)
 
 ## License
 

@@ -200,6 +200,18 @@ def _json_dumps(obj):
     return json.dumps(obj, ensure_ascii=False)
 
 
+def _detect_model(report_path: Path) -> str:
+    """Extract model name from a markdown report title like '# RAG Baseline — model @ top-k'."""
+    try:
+        with open(report_path, encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("# ") and " — " in line:
+                    return line.split(" — ")[1].split(" @")[0].strip()
+    except Exception:
+        pass
+    return "unknown-model"
+
+
 def generate_html(
     label_a: str,
     summary_a: dict,
@@ -208,6 +220,7 @@ def generate_html(
     summary_b: dict,
     is_cache_b: bool,
     output_path: str,
+    model: str = "",
 ) -> str:
     qt_a = _json_dumps(summary_a["qtype_scores"])
     qt_b = _json_dumps(summary_b["qtype_scores"])
@@ -284,7 +297,7 @@ footer {{ text-align:center; color:#475569; font-size:0.8rem; margin-top:48px; p
 <div class="container">
 <header>
   <h1>CAG-Lab Benchmark Comparison</h1>
-  <p>{label_a} vs {label_b} — gpt-4o-mini on aws-docs</p>
+  <p>{label_a} vs {label_b} — {model or "see config"}</p>
   <p style="font-size:0.8rem; color:#64748b;">Generated {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}</p>
 </header>
 
@@ -461,14 +474,25 @@ Chart.defaults.color = '#94a3b8';
 Chart.defaults.borderColor = '#334155';
 Chart.defaults.font.family = 'Inter';
 
-function makeBins(data, binSize) {{
+// Adaptive bin size: use p95 of combined latencies to avoid long-tail distortion
+const _allLat = [...latA, ...latB].filter(v => v > 0).sort((a, b) => a - b);
+const _p95idx = Math.max(0, Math.floor(_allLat.length * 0.95) - 1);
+const _latMax = (_allLat[_p95idx] || Math.max(..._allLat, 1));
+const _rawBin = _latMax / 20;
+const _mag = Math.pow(10, Math.floor(Math.log10(_rawBin || 1)));
+const binSize = Math.max(0.5, Math.ceil(_rawBin / _mag) * _mag);
+const latEnd = Math.ceil(_latMax / binSize) * binSize;
+
+function makeBins(data, end, bSize) {{
   if (!data.length) return {{labels:[],bins:[]}};
-  const mx = Math.max(...data);
-  const n = Math.ceil(mx / binSize);
+  const n = Math.ceil(end / bSize);
   const labels = [];
   const bins = new Array(n).fill(0);
-  for (let i = 0; i < n; i++) labels.push((i*binSize).toFixed(1)+'-'+((i+1)*binSize).toFixed(1));
-  for (const v of data) bins[Math.min(Math.floor(v/binSize), n-1)]++;
+  for (let i = 0; i < n; i++) labels.push((i*bSize).toFixed(1)+'-'+((i+1)*bSize).toFixed(1)+'s');
+  for (const v of data) {{
+    if (v > end) continue;
+    bins[Math.min(Math.floor(v / bSize), n-1)]++;
+  }}
   return {{labels, bins}};
 }}
 
@@ -498,19 +522,16 @@ new Chart(ctx2, {{
   options: {{ responsive:true, plugins:{{ legend:{{position:'bottom',labels:{{padding:20}}}} }}, scales:{{ y:{{ beginAtZero:true }} }} }}
 }});
 
-const binsA = makeBins(latA, 1.0);
-const binsB = makeBins(latB, 1.0);
-const maxBins = Math.max(binsA.labels.length, binsB.labels.length);
-const allLabels = [];
-for (let i=0; i<maxBins; i++) allLabels.push((i).toFixed(0)+'-'+(i+1).toFixed(0)+'s');
+const binsA = makeBins(latA, latEnd, binSize);
+const binsB = makeBins(latB, latEnd, binSize);
 const ctx3 = document.getElementById('chartLatDist');
 new Chart(ctx3, {{
   type: 'bar',
   data: {{
-    labels: allLabels,
+    labels: binsA.labels,
     datasets: [
-      {{ label: LATA, data: allLabels.map((_,i)=>binsA.bins[i]||0), backgroundColor: '#60a5fa60', borderColor: '#60a5fa', borderWidth: 1 }},
-      {{ label: LATB, data: allLabels.map((_,i)=>binsB.bins[i]||0), backgroundColor: '#a78bfa60', borderColor: '#a78bfa', borderWidth: 1 }},
+      {{ label: LATA, data: binsA.bins, backgroundColor: '#60a5fa60', borderColor: '#60a5fa', borderWidth: 1 }},
+      {{ label: LATB, data: binsB.bins.concat(new Array(Math.max(0, binsA.bins.length - binsB.bins.length)).fill(0)), backgroundColor: '#a78bfa60', borderColor: '#a78bfa', borderWidth: 1 }},
     ]
   }},
   options: {{ responsive:true, plugins:{{ legend:{{position:'bottom',labels:{{padding:20}}}} }}, scales:{{ x:{{ title:{{display:true,text:'Latency (seconds)'}} }}, y:{{ title:{{display:true,text:'Questions'}}, beginAtZero:true }} }} }}
@@ -563,7 +584,7 @@ new Chart(ctxPie, {{
 }});
 """
 
-    html += """
+    html += f"""
 </script>
 
 <div class="section" style="text-align:center; padding-top: 16px;">
@@ -573,7 +594,7 @@ new Chart(ctxPie, {{
 </div>
 
 <footer>
-  CAG-Lab Benchmark Report &middot; GPT-4o-mini on aws-docs pinecone index
+  CAG-Lab Benchmark Report &middot; {model or "see config"}
 </footer>
 </div>
 </body>
@@ -650,6 +671,28 @@ def generate_markdown(
             "p95 Latency",
             summary_a["latency_stats"]["p95"],
             summary_b["latency_stats"]["p95"],
+            fmt=".2f",
+            suffix=" s",
+        )
+    )
+    lines.append(
+        row(
+            "p99 Latency",
+            summary_a["latency_stats"].get(
+                "p99", summary_a["latency_stats"].get("max", 0)
+            ),
+            summary_b["latency_stats"].get(
+                "p99", summary_b["latency_stats"].get("max", 0)
+            ),
+            fmt=".2f",
+            suffix=" s",
+        )
+    )
+    lines.append(
+        row(
+            "Mean Latency",
+            summary_a["latency_stats"]["mean"],
+            summary_b["latency_stats"]["mean"],
             fmt=".2f",
             suffix=" s",
         )
@@ -795,6 +838,14 @@ def main():
     out_dir = Path(args.output_dir)
     out_dir.mkdir(exist_ok=True)
 
+    # Auto-detect model from the most recent experiment report
+    model = ""
+    report_glob = sorted(
+        Path("results/reports").glob("*_report.md"), key=lambda p: p.stat().st_mtime
+    )
+    if report_glob:
+        model = _detect_model(report_glob[-1])
+
     html_path = generate_html(
         args.label_a,
         summary_a,
@@ -803,6 +854,7 @@ def main():
         summary_b,
         is_cache_b,
         str(out_dir / f"{args.prefix}.html"),
+        model=model,
     )
     md_path = generate_markdown(
         args.label_a,
