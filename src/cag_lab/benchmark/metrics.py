@@ -16,21 +16,39 @@ import yaml
 
 
 def latency_stats(latencies_seconds: list[float]) -> dict:
-    """Compute p50 and p95 from a list of per-question wall-clock latencies (s)."""
+    """Compute latency distribution from a list of wall-clock latencies (s)."""
     if not latencies_seconds:
-        return {"p50": 0.0, "p95": 0.0}
-    sorted_latencies = sorted(latencies_seconds)
-    n = len(sorted_latencies)
+        return {
+            "p25": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "mean": 0.0,
+        }
+    sorted_l = sorted(latencies_seconds)
+    n = len(sorted_l)
 
-    def _percentile(pct: float) -> float:
+    def _pctile(pct: float) -> float:
         k = (pct / 100.0) * (n - 1)
         f = math.floor(k)
         c = math.ceil(k)
         if f == c:
-            return sorted_latencies[int(k)]
-        return sorted_latencies[f] * (c - k) + sorted_latencies[c] * (k - f)
+            return sorted_l[int(k)]
+        return sorted_l[f] * (c - k) + sorted_l[c] * (k - f)
 
-    return {"p50": _percentile(50), "p95": _percentile(95)}
+    return {
+        "p25": _pctile(25),
+        "p50": _pctile(50),
+        "p75": _pctile(75),
+        "p95": _pctile(95),
+        "p99": _pctile(99),
+        "min": sorted_l[0],
+        "max": sorted_l[-1],
+        "mean": sum(sorted_l) / n,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -51,7 +69,14 @@ def compute_question_cost(
     pricing: dict,
 ) -> float:
     """Cost for one question given token counts and the pricing table."""
-    model_pricing = pricing.get(model, {})
+    model_pricing = pricing.get(model)
+    if model_pricing is None:
+        from warnings import warn
+
+        warn(
+            f"Model '{model}' not found in pricing.yaml — cost set to $0", stacklevel=2
+        )
+        model_pricing = {}
     input_price = model_pricing.get("input", 0.0)
     output_price = model_pricing.get("output", 0.0)
     cost = (prompt_tokens / 1_000_000) * input_price + (

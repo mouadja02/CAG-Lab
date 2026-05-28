@@ -1,5 +1,5 @@
 architecture: semantic_cache_rag
-dataset: data/benchmark_sets/aws_docs_v3.jsonl
+dataset: data/benchmark_sets/experiment_dataset.jsonl
 index: aws-docs
 model: nvidia/nemotron-nano-9b-v2
 top_k: 5

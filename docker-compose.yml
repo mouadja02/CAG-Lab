@@ -3,6 +3,13 @@ services:
     image: redis/redis-stack-server:7.2.0-v13
     ports:
       - "6379:6379"
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 512M
+    volumes:
+      - redis_data:/data
 
   qdrant:
     image: qdrant/qdrant:latest
@@ -11,6 +18,14 @@ services:
       - "6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 2G
+    environment:
+      QDRANT__SERVICE__MAX_INDEXING_THREADS: 4
 
 volumes:
   qdrant_data:
+  redis_data:

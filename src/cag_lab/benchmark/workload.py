@@ -138,8 +138,22 @@ def generate_workload(
                 )
             )
 
-    rng.shuffle(workload)
-    return workload
+    groups: dict[str, list[WorkloadItem]] = {}
+    for item in workload:
+        groups.setdefault(item.source_id, []).append(item)
+
+    for gid in groups:
+        groups[gid].sort(
+            key=lambda i: {"new": 0, "paraphrase": 1, "exact": 2}[i.relationship]
+        )
+
+    sorted_workload: list[WorkloadItem] = []
+    group_order = list(groups.keys())
+    rng.shuffle(group_order)
+    for gid in group_order:
+        sorted_workload.extend(groups[gid])
+
+    return sorted_workload
 
 
 # ---------------------------------------------------------------------------

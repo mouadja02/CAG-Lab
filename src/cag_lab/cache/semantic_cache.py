@@ -19,8 +19,9 @@ from cag_lab.embeddings import embed
 _INDEX_NAME = "idx:semantic_cache"
 _KEY_PREFIX = "cache:"
 _DISTANCE_METRIC = "COSINE"
-_HNSW_M = 16
-_HNSW_EF = 200
+_HNSW_M = 64
+_HNSW_EF_CONSTRUCT = 400
+_HNSW_EF_RUNTIME = 300
 
 
 @dataclass
@@ -56,8 +57,19 @@ class SemanticCache:
 
     def _ensure_index(self) -> None:
         try:
-            self._redis_decoded.ft(_INDEX_NAME).info()
+            info = self._redis_decoded.ft(_INDEX_NAME).info()
+            attrs = info.get("attributes", [])
+            for attr in attrs:
+                if attr and isinstance(attr, list) and len(attr) > 7:
+                    cur_m = attr[7].get("M")
+                    if cur_m is not None and int(cur_m) != _HNSW_M:
+                        self._redis_decoded.ft(_INDEX_NAME).dropindex()
+                        raise Exception("rebuild")
         except Exception:
+            try:
+                self._redis_decoded.ft(_INDEX_NAME).dropindex()
+            except Exception:
+                pass
             schema = (
                 NumericField("created_at"),
                 VectorField(
@@ -68,7 +80,8 @@ class SemanticCache:
                         "DIM": self._embedding_dimensions,
                         "DISTANCE_METRIC": _DISTANCE_METRIC,
                         "M": _HNSW_M,
-                        "EF_CONSTRUCTION": _HNSW_EF,
+                        "EF_CONSTRUCTION": _HNSW_EF_CONSTRUCT,
+                        "EF_RUNTIME": _HNSW_EF_RUNTIME,
                     },
                 ),
             )

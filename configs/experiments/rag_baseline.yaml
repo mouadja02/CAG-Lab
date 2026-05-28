@@ -1,5 +1,5 @@
 architecture: classic_rag
-dataset: data/benchmark_sets/aws_docs_v3.jsonl
+dataset: data/benchmark_sets/experiment_dataset.jsonl
 index: aws-docs
 model: nvidia/nemotron-nano-9b-v2 # we ll be using a simple model because we want to evaluate retrieval quality, not model general knowledge
 top_k: 5

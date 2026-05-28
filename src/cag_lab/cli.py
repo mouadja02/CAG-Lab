@@ -10,7 +10,7 @@ app = typer.Typer(no_args_is_help=True)
 def _default_llm_model() -> str:
     from cag_lab.config import get_llm_model
 
-    return f"openrouter/{get_llm_model()}"
+    return get_llm_model()
 
 
 @app.callback()

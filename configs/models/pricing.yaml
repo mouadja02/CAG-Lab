@@ -4,5 +4,8 @@ gpt-4o-mini:
   input: 0.15
   output: 0.60
 nvidia/nemotron-nano-9b-v2:
-  input: 0
-  output: 0
+  input: 0.04
+  output: 0.16
+openai/gpt-oss-120b:nitro:
+  input: 0.039
+  output: 0.18

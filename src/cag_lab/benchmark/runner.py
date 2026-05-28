@@ -5,6 +5,7 @@ collects per-question records, and writes a JSONL + report.md to results/.
 """
 
 import json
+import os
 import time
 from collections import Counter
 from datetime import datetime, timezone
@@ -27,6 +28,9 @@ from cag_lab.benchmark.metrics import (
     retrieval_relevance,
 )
 
+_REPORT_INTERVAL = 10
+_RESUME_MAX_AGE_HOURS = 6
+
 
 # ---------------------------------------------------------------------------
 # Architecture runners
@@ -34,7 +38,13 @@ from cag_lab.benchmark.metrics import (
 
 
 def _run_classic_rag(
-    config: dict, questions: list[BenchmarkQuestion], pricing: dict
+    config: dict,
+    questions: list[BenchmarkQuestion],
+    pricing: dict,
+    jsonl_path: Path,
+    report_path: Path,
+    resumed_ids: set[str],
+    existing_records: list[dict],
 ) -> list[dict]:
     from cag_lab.generation.answer_generator import generate_answer
     from cag_lab.retrieval import Retriever
@@ -47,57 +57,77 @@ def _run_classic_rag(
 
     retriever = Retriever(index_name=index_name, top_k=top_k)
 
-    records: list[dict] = []
-    for q in tqdm(questions, desc="  Classic RAG  ", unit="q"):
-        t0 = time.perf_counter()
-        chunks = retriever.retrieve(q.question)
-        result = generate_answer(q.question, chunks, model=model)
-        latency_s = time.perf_counter() - t0
+    records: list[dict] = list(existing_records)
+    jsonl_dir = jsonl_path.parent
+    jsonl_dir.mkdir(parents=True, exist_ok=True)
 
-        judge = llm_judge_correctness(
-            q.question,
-            q.expected_answer,
-            result.answer,
-            judge_model=judge_model,
-        )
+    with open(jsonl_path, "a", encoding="utf-8") as f:
+        for q in tqdm(questions, desc="  Classic RAG  ", unit="q"):
+            if q.id in resumed_ids:
+                continue
 
-        cost = compute_question_cost(
-            result.prompt_tokens, result.completion_tokens, model, pricing
-        )
+            t0 = time.perf_counter()
+            chunks = retriever.retrieve(q.question)
+            result = generate_answer(q.question, chunks, model=model)
+            latency_s = time.perf_counter() - t0
 
-        record = {
-            "question_id": q.id,
-            "query_type": q.query_type.value,
-            "difficulty": q.difficulty.value,
-            "question": q.question,
-            "answer": result.answer,
-            "cited_sources": result.sources,
-            "prompt_tokens": result.prompt_tokens,
-            "completion_tokens": result.completion_tokens,
-            "latency_s": round(latency_s, 4),
-            "judge_score": judge["score"],
-            "judge_rationale": judge["rationale"],
-            "cost": round(cost, 8),
-            "has_citation": citation_present(result.answer),
-        }
-
-        if eval_retrieval:
-            chunk_texts = [c.text for c in chunks]
-            rel = retrieval_relevance(
+            judge = llm_judge_correctness(
                 q.question,
                 q.expected_answer,
-                chunk_texts,
+                result.answer,
                 judge_model=judge_model,
             )
-            record["retrieval_relevance"] = rel["score"]
-            record["retrieval_rationale"] = rel["rationale"]
 
-        records.append(record)
+            cost = compute_question_cost(
+                result.prompt_tokens, result.completion_tokens, model, pricing
+            )
+
+            record = {
+                "question_id": q.id,
+                "query_type": q.query_type.value,
+                "difficulty": q.difficulty.value,
+                "question": q.question,
+                "answer": result.answer,
+                "cited_sources": result.sources,
+                "prompt_tokens": result.prompt_tokens,
+                "completion_tokens": result.completion_tokens,
+                "latency_s": round(latency_s, 4),
+                "judge_score": judge["score"],
+                "judge_rationale": judge["rationale"],
+                "cost": round(cost, 8),
+                "has_citation": citation_present(result.answer),
+            }
+
+            if eval_retrieval:
+                chunk_texts = [c.text for c in chunks]
+                rel = retrieval_relevance(
+                    q.question,
+                    q.expected_answer,
+                    chunk_texts,
+                    judge_model=judge_model,
+                )
+                record["retrieval_relevance"] = rel["score"]
+                record["retrieval_rationale"] = rel["rationale"]
+
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+            f.flush()
+            records.append(record)
+
+            if len(records) % _REPORT_INTERVAL == 0:
+                _write_report(report_path, config, records, pricing, jsonl_path.name)
 
     return records
 
 
-def _run_semantic_cache_rag(config: dict, workload, pricing: dict) -> list[dict]:
+def _run_semantic_cache_rag(
+    config: dict,
+    workload,
+    pricing: dict,
+    jsonl_path: Path,
+    report_path: Path,
+    resumed_ids: set[str],
+    existing_records: list[dict],
+) -> list[dict]:
     from cag_lab.cache.semantic_cache import SemanticCache
     from cag_lab.generation.answer_generator import AnswerResult, generate_answer
     from cag_lab.retrieval import Retriever
@@ -112,17 +142,93 @@ def _run_semantic_cache_rag(config: dict, workload, pricing: dict) -> list[dict]
     cache = SemanticCache(similarity_threshold=threshold, ttl_seconds=ttl)
     retriever = Retriever(index_name=index_name, top_k=top_k)
 
-    records: list[dict] = []
-    for item in tqdm(workload, desc="  Cache RAG    ", unit="q"):
-        t0 = time.perf_counter()
-        cache_result = cache.lookup(item.question)
-        lookup_latency = time.perf_counter() - t0
+    records: list[dict] = list(existing_records)
+    jsonl_dir = jsonl_path.parent
+    jsonl_dir.mkdir(parents=True, exist_ok=True)
 
-        if cache_result.hit:
-            false_pos = cache_result.cached_source_id != item.source_id
-            gen_cost = compute_question_cost(0, 0, model, pricing)
-            avg_cost = _running_avg_gen_cost(records) or 0.0007
-            saved = avg_cost - gen_cost
+    with open(jsonl_path, "a", encoding="utf-8") as f:
+        for item in tqdm(workload, desc="  Cache RAG    ", unit="q"):
+            if item.item_id in resumed_ids:
+                continue
+
+            t0 = time.perf_counter()
+            cache_result = cache.lookup(item.question)
+            lookup_latency = time.perf_counter() - t0
+
+            if cache_result.hit:
+                false_pos = cache_result.cached_source_id != item.source_id
+                gen_cost = compute_question_cost(0, 0, model, pricing)
+                avg_cost = _running_avg_gen_cost(records) or 0.0007
+                saved = avg_cost - gen_cost
+
+                records.append(
+                    {
+                        "item_id": item.item_id,
+                        "question_id": item.source_id,
+                        "relationship": item.relationship,
+                        "paraphrase_tier": item.paraphrase_tier,
+                        "query_type": item.query_type,
+                        "difficulty": item.difficulty,
+                        "question": item.question,
+                        "answer": cache_result.answer,
+                        "cited_sources": cache_result.sources,
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "latency_s": round(lookup_latency, 4),
+                        "judge_score": 0,
+                        "judge_rationale": "",
+                        "cost": 0.0,
+                        "has_citation": citation_present(cache_result.answer),
+                        "cache_hit": True,
+                        "cache_match_score": cache_result.score,
+                        "cached_question_id": cache_result.cached_source_id,
+                        "false_positive": false_pos,
+                        "cost_saved": round(saved, 8),
+                    }
+                )
+
+                if not false_pos:
+                    judge = llm_judge_correctness(
+                        item.question,
+                        item.expected_answer,
+                        cache_result.answer,
+                        judge_model=judge_model,
+                    )
+                    records[-1]["judge_score"] = judge["score"]
+                    records[-1]["judge_rationale"] = judge["rationale"]
+
+                f.write(json.dumps(records[-1], ensure_ascii=False) + "\n")
+                f.flush()
+
+                if len(records) % _REPORT_INTERVAL == 0:
+                    _write_report(
+                        report_path, config, records, pricing, jsonl_path.name
+                    )
+                continue
+
+            t0 = time.perf_counter()
+            chunks = retriever.retrieve(item.question)
+            result = generate_answer(item.question, chunks, model=model)
+            latency_s = time.perf_counter() - t0 + lookup_latency
+
+            judge = llm_judge_correctness(
+                item.question,
+                item.expected_answer,
+                result.answer,
+                judge_model=judge_model,
+            )
+
+            cost = compute_question_cost(
+                result.prompt_tokens, result.completion_tokens, model, pricing
+            )
+
+            cache.store(
+                query=item.question,
+                answer=result.answer,
+                sources=result.sources,
+                model=model,
+                source_id=item.source_id,
+            )
 
             records.append(
                 {
@@ -133,83 +239,28 @@ def _run_semantic_cache_rag(config: dict, workload, pricing: dict) -> list[dict]
                     "query_type": item.query_type,
                     "difficulty": item.difficulty,
                     "question": item.question,
-                    "answer": cache_result.answer,
-                    "cited_sources": cache_result.sources,
-                    "prompt_tokens": 0,
-                    "completion_tokens": 0,
-                    "latency_s": round(lookup_latency, 4),
-                    "judge_score": 0,
-                    "judge_rationale": "",
-                    "cost": 0.0,
-                    "has_citation": citation_present(cache_result.answer),
-                    "cache_hit": True,
-                    "cache_match_score": cache_result.score,
-                    "cached_question_id": cache_result.cached_source_id,
-                    "false_positive": false_pos,
-                    "cost_saved": round(saved, 8),
+                    "answer": result.answer,
+                    "cited_sources": result.sources,
+                    "prompt_tokens": result.prompt_tokens,
+                    "completion_tokens": result.completion_tokens,
+                    "latency_s": round(latency_s, 4),
+                    "judge_score": judge["score"],
+                    "judge_rationale": judge["rationale"],
+                    "cost": round(cost, 8),
+                    "has_citation": citation_present(result.answer),
+                    "cache_hit": False,
+                    "cache_match_score": None,
+                    "cached_question_id": None,
+                    "false_positive": False,
+                    "cost_saved": 0.0,
                 }
             )
 
-            if not false_pos:
-                judge = llm_judge_correctness(
-                    item.question,
-                    item.expected_answer,
-                    cache_result.answer,
-                    judge_model=judge_model,
-                )
-                records[-1]["judge_score"] = judge["score"]
-                records[-1]["judge_rationale"] = judge["rationale"]
-            continue
+            f.write(json.dumps(records[-1], ensure_ascii=False) + "\n")
+            f.flush()
 
-        t0 = time.perf_counter()
-        chunks = retriever.retrieve(item.question)
-        result = generate_answer(item.question, chunks, model=model)
-        latency_s = time.perf_counter() - t0 + lookup_latency
-
-        judge = llm_judge_correctness(
-            item.question,
-            item.expected_answer,
-            result.answer,
-            judge_model=judge_model,
-        )
-
-        cost = compute_question_cost(
-            result.prompt_tokens, result.completion_tokens, model, pricing
-        )
-
-        cache.store(
-            query=item.question,
-            answer=result.answer,
-            sources=result.sources,
-            model=model,
-            source_id=item.source_id,
-        )
-
-        records.append(
-            {
-                "item_id": item.item_id,
-                "question_id": item.source_id,
-                "relationship": item.relationship,
-                "paraphrase_tier": item.paraphrase_tier,
-                "query_type": item.query_type,
-                "difficulty": item.difficulty,
-                "question": item.question,
-                "answer": result.answer,
-                "cited_sources": result.sources,
-                "prompt_tokens": result.prompt_tokens,
-                "completion_tokens": result.completion_tokens,
-                "latency_s": round(latency_s, 4),
-                "judge_score": judge["score"],
-                "judge_rationale": judge["rationale"],
-                "cost": round(cost, 8),
-                "has_citation": citation_present(result.answer),
-                "cache_hit": False,
-                "cache_match_score": None,
-                "cached_question_id": None,
-                "false_positive": False,
-                "cost_saved": 0.0,
-            }
-        )
+            if len(records) % _REPORT_INTERVAL == 0:
+                _write_report(report_path, config, records, pricing, jsonl_path.name)
 
     return records
 
@@ -234,8 +285,6 @@ def run_experiment(config_path: str | Path) -> None:
     with open(config_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
-    import os
-
     llm_model = os.getenv("LLM_MODEL")
     if llm_model:
         config["model"] = llm_model
@@ -254,12 +303,27 @@ def run_experiment(config_path: str | Path) -> None:
     print(f"  Experiment: {architecture} | model={model}")
     print(f"{'=' * 60}")
 
+    jsonl_path, report_path, resumed_ids, existing_records = _prepare_output(
+        config_path.stem
+    )
+
+    if resumed_ids:
+        print(f"  Resuming: {len(resumed_ids)} already completed")
+
     if architecture == "classic_rag":
         print(
             f"  Questions: {len(base_questions)} | index={config.get('index')} | top_k={config.get('top_k')}"
         )
-        records = _run_classic_rag(config, base_questions, pricing)
-        _write_results(config_path.stem, config, records, pricing)
+        records = _run_classic_rag(
+            config,
+            base_questions,
+            pricing,
+            jsonl_path,
+            report_path,
+            resumed_ids,
+            existing_records,
+        )
+        _write_report(report_path, config, records, pricing, jsonl_path.name)
     elif architecture == "semantic_cache_rag":
         from cag_lab.benchmark.workload import generate_workload
 
@@ -281,8 +345,16 @@ def run_experiment(config_path: str | Path) -> None:
         print(
             f"  Workload: {len(workload)} items | threshold={config.get('cache_threshold', 0.92)}"
         )
-        records = _run_semantic_cache_rag(config, workload, pricing)
-        _write_results(config_path.stem, config, records, pricing)
+        records = _run_semantic_cache_rag(
+            config,
+            workload,
+            pricing,
+            jsonl_path,
+            report_path,
+            resumed_ids,
+            existing_records,
+        )
+        _write_report(report_path, config, records, pricing, jsonl_path.name)
     elif architecture == "long_context":
         raise NotImplementedError("Architecture 'long_context' is not yet implemented.")
     else:
@@ -294,27 +366,48 @@ def run_experiment(config_path: str | Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _write_results(
-    experiment_name: str, config: dict, records: list[dict], pricing: dict
-) -> None:
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+def _prepare_output(experiment_name: str) -> tuple[Path, Path, set[str], list[dict]]:
+    """Create output paths and detect resume state.
+
+    Returns (jsonl_path, report_path, resumed_ids, existing_records).
+    If an in-progress file exists within _RESUME_MAX_AGE_HOURS, reuse it and
+    return the set of already-completed IDs + loaded records.
+    """
     jsonl_dir = Path("results") / "jsonl"
     reports_dir = Path("results") / "reports"
     jsonl_dir.mkdir(parents=True, exist_ok=True)
     reports_dir.mkdir(parents=True, exist_ok=True)
 
-    jsonl_path = jsonl_dir / f"{experiment_name}_{ts}.jsonl"
-    with open(jsonl_path, "w", encoding="utf-8") as f:
-        for rec in records:
-            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 
-    _write_report(
-        reports_dir / f"{experiment_name}_{ts}_report.md",
-        config,
-        records,
-        pricing,
-        jsonl_path.name,
+    candidates = sorted(
+        jsonl_dir.glob(f"{experiment_name}_*.jsonl"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
     )
+    if candidates:
+        latest = candidates[0]
+        age_hours = (time.time() - latest.stat().st_mtime) / 3600
+        if 0 < age_hours <= _RESUME_MAX_AGE_HOURS:
+            resumed_ids: set[str] = set()
+            existing_records: list[dict] = []
+            with open(latest, encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        rec = json.loads(line)
+                        existing_records.append(rec)
+                        qid = rec.get("item_id") or rec.get("question_id")
+                        if qid:
+                            resumed_ids.add(qid)
+                    except json.JSONDecodeError:
+                        pass
+            jsonl_path = latest
+            report_path = reports_dir / f"{jsonl_path.stem}_report.md"
+            return jsonl_path, report_path, resumed_ids, existing_records
+
+    jsonl_path = jsonl_dir / f"{experiment_name}_{ts}.jsonl"
+    report_path = reports_dir / f"{experiment_name}_{ts}_report.md"
+    return jsonl_path, report_path, set(), []
 
 
 def _write_report(
@@ -327,26 +420,27 @@ def _write_report(
     model = config["model"]
     architecture = config["architecture"]
     n = len(records)
-    latencies = [r["latency_s"] for r in records]
+    latencies = [r["latency_s"] for r in records if r]
     l_stats = latency_stats(latencies)
 
-    scores = [r["judge_score"] for r in records]
+    scores = [r["judge_score"] for r in records if r]
     mean_score = sum(scores) / n if n else 0.0
 
-    cite_count = sum(1 for r in records if r["has_citation"])
+    cite_count = sum(1 for r in records if r and r.get("has_citation"))
     cite_rate = cite_count / n if n else 0.0
 
-    total_cost = sum(r["cost"] for r in records)
+    total_cost = sum(r.get("cost", 0.0) for r in records)
     cost_per_1k = (total_cost / n * 1000) if n else 0.0
 
-    total_prompt_tokens = sum(r["prompt_tokens"] for r in records)
-    total_completion_tokens = sum(r["completion_tokens"] for r in records)
+    total_prompt_tokens = sum(r.get("prompt_tokens", 0) for r in records)
+    total_completion_tokens = sum(r.get("completion_tokens", 0) for r in records)
 
-    is_cache = any(r.get("cache_hit") is not None for r in records)
+    is_cache = any(r.get("cache_hit") is not None for r in records if r)
 
     type_groups: dict[str, list[dict]] = {}
     for r in records:
-        type_groups.setdefault(r["query_type"], []).append(r)
+        if r:
+            type_groups.setdefault(r["query_type"], []).append(r)
 
     lines = [
         f"# {config_path_to_title(config)}",
@@ -384,8 +478,12 @@ def _write_report(
         f"|--------|-------|",
         f"| Mean judge score | {mean_score:.3f} |",
         f"| Citation rate | {cite_rate:.1%} |",
+        f"| Mean latency | {l_stats['mean']:.2f} s |",
         f"| p50 latency | {l_stats['p50']:.2f} s |",
         f"| p95 latency | {l_stats['p95']:.2f} s |",
+        f"| p99 latency | {l_stats['p99']:.2f} s |",
+        f"| Min latency | {l_stats['min']:.2f} s |",
+        f"| Max latency | {l_stats['max']:.2f} s |",
         f"| Total tokens | {total_prompt_tokens + total_completion_tokens:,} ({total_prompt_tokens:,} prompt + {total_completion_tokens:,} completion) |",
         f"| Total cost | ${total_cost:.6f} |",
         f"| Cost per 1k questions | ${cost_per_1k:.6f} |",
@@ -397,7 +495,8 @@ def _write_report(
         saved = cost_saved(records)
         rel_groups: dict[str, list[dict]] = {}
         for r in records:
-            rel_groups.setdefault(r.get("relationship", "new"), []).append(r)
+            if r:
+                rel_groups.setdefault(r.get("relationship", "new"), []).append(r)
 
         lines += [
             "",
@@ -433,13 +532,13 @@ def _write_report(
         group = type_groups[qtype]
         g_n = len(group)
         g_score = sum(r["judge_score"] for r in group) / g_n if g_n else 0.0
-        g_cite = sum(1 for r in group if r["has_citation"]) / g_n if g_n else 0.0
+        g_cite = sum(1 for r in group if r.get("has_citation")) / g_n if g_n else 0.0
         lines.append(f"| {qtype} | {g_n} | {g_score:.3f} | {g_cite:.1%} |")
 
-    # Per-difficulty breakdown
     diff_groups: dict[str, list[dict]] = {}
     for r in records:
-        diff_groups.setdefault(r.get("difficulty", "?"), []).append(r)
+        if r:
+            diff_groups.setdefault(r.get("difficulty", "?"), []).append(r)
 
     lines += [
         "",
@@ -456,9 +555,8 @@ def _write_report(
             g_lat = latency_stats([r["latency_s"] for r in group])["p50"]
             lines.append(f"| {diff} | {g_n} | {g_score:.3f} | {g_lat:.2f} s |")
 
-    # Retrieval relevance (if present)
     rel_scores = [
-        r["retrieval_relevance"] for r in records if "retrieval_relevance" in r
+        r["retrieval_relevance"] for r in records if r and "retrieval_relevance" in r
     ]
     if rel_scores:
         mean_rel = sum(rel_scores) / len(rel_scores)
@@ -477,8 +575,7 @@ def _write_report(
             f"| Irrelevant (0) | {no_rel} ({no_rel / len(rel_scores):.1%}) |",
         ]
 
-    # Paraphrase tier breakdown (if present)
-    tier_records = [r for r in records if r.get("paraphrase_tier")]
+    tier_records = [r for r in records if r and r.get("paraphrase_tier")]
     if tier_records:
         tier_groups: dict[str, list[dict]] = {}
         for r in tier_records:
@@ -502,8 +599,7 @@ def _write_report(
                     f"| {tier} | {g_n} | {g_hits} | {g_hit_rate:.1%} | {g_score:.3f} |"
                 )
 
-    # False positive error analysis (if present)
-    fp_records = [r for r in records if r.get("false_positive")]
+    fp_records = [r for r in records if r and r.get("false_positive")]
     if fp_records:
         lines += [
             "",
@@ -547,11 +643,6 @@ def run_sweep(
     thresholds: list[float] | None = None,
     workload_mixes: list[dict] | None = None,
 ) -> list[dict]:
-    """Run an experiment multiple times with varying parameters.
-
-    Returns a list of per-run summary dicts for downstream aggregation.
-    Produces one JSONL + report per run, plus a sweep summary report.
-    """
     import copy
     import statistics
 
@@ -561,8 +652,6 @@ def run_sweep(
 
     with open(config_path, encoding="utf-8") as f:
         base_config = yaml.safe_load(f)
-
-    import os
 
     llm_model = os.getenv("LLM_MODEL")
     if llm_model:
@@ -607,6 +696,9 @@ def run_sweep(
                     f"_p={mix['paraphrase_rate']}_s={seed}"
                 )
 
+                # Sweep always creates fresh files (no resume)
+                jsonl_path, report_path, _, _ = _prepare_output(f"sweep_{run_label}")
+
                 architecture = config["architecture"]
                 if architecture == "semantic_cache_rag":
                     from cag_lab.benchmark.workload import generate_workload
@@ -624,19 +716,28 @@ def run_sweep(
                             "paraphrase_model", "gpt-4o-mini"
                         ),
                     )
-                    records = _run_semantic_cache_rag(config, workload, pricing)
+                    records = _run_semantic_cache_rag(
+                        config, workload, pricing, jsonl_path, report_path, set(), []
+                    )
                 elif architecture == "classic_rag":
-                    records = _run_classic_rag(config, base_questions, pricing)
+                    records = _run_classic_rag(
+                        config,
+                        base_questions,
+                        pricing,
+                        jsonl_path,
+                        report_path,
+                        set(),
+                        [],
+                    )
                 else:
                     raise ValueError(f"Sweep not supported for: {architecture}")
 
-                _write_results(f"sweep_{run_label}", config, records, pricing)
+                _write_report(report_path, config, records, pricing, jsonl_path.name)
 
-                # Compute summary for this run
-                scores = [r["judge_score"] for r in records]
-                latencies = [r["latency_s"] for r in records]
-                costs = [r["cost"] for r in records]
-                n = len(records)
+                scores = [r["judge_score"] for r in records if r]
+                latencies = [r["latency_s"] for r in records if r]
+                costs = [r.get("cost", 0.0) for r in records]
+                n = len([r for r in records if r])
 
                 summary = {
                     "run_label": run_label,
@@ -650,14 +751,13 @@ def run_sweep(
                     "cost_per_1k": (sum(costs) / n * 1000) if n else 0,
                 }
 
-                if any(r.get("cache_hit") is not None for r in records):
+                if any(r.get("cache_hit") is not None for r in records if r):
                     summary["cache_hit_rate"] = cache_hit_rate(records)
                     summary["false_positive_rate"] = false_positive_hit_rate(records)
                     summary["cost_saved"] = cost_saved(records)
 
                 run_summaries.append(summary)
 
-            # Aggregate across seeds for this threshold+mix
             if len(run_summaries) > 1:
                 agg = _aggregate_runs(run_summaries)
                 agg["threshold"] = threshold
@@ -666,13 +766,11 @@ def run_sweep(
             else:
                 all_summaries.append(run_summaries[0])
 
-    # Write sweep summary
     _write_sweep_summary(all_summaries)
     return all_summaries
 
 
 def _aggregate_runs(summaries: list[dict]) -> dict:
-    """Compute mean and std dev across multiple runs."""
     import statistics
 
     def _agg(key: str) -> dict:
@@ -704,7 +802,6 @@ def _write_sweep_summary(summaries: list[dict]) -> None:
     with open(path, "w", encoding="utf-8") as f:
         json.dump(summaries, f, indent=2, ensure_ascii=False)
 
-    # Also write a human-readable markdown
     md_path = out_dir / f"sweep_summary_{ts}_report.md"
     lines = [
         "# Sweep Summary",

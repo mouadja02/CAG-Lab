@@ -1,9 +1,13 @@
 from dataclasses import dataclass
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams
+from qdrant_client.models import Distance, HnswConfigDiff, SearchParams, VectorParams
 
 from cag_lab.embeddings import embed
+
+_HNSW_M = 32
+_HNSW_EF_CONSTRUCT = 200
+_HNSW_EF_SEARCH = 128
 
 
 @dataclass
@@ -42,6 +46,18 @@ class Retriever:
                     size=self._embedding_dimensions,
                     distance=Distance.COSINE,
                 ),
+                hnsw_config=HnswConfigDiff(
+                    m=_HNSW_M,
+                    ef_construct=_HNSW_EF_CONSTRUCT,
+                ),
+            )
+        else:
+            self._qdrant.update_collection(
+                collection_name=self._collection_name,
+                hnsw_config=HnswConfigDiff(
+                    m=_HNSW_M,
+                    ef_construct=_HNSW_EF_CONSTRUCT,
+                ),
             )
 
     def retrieve(self, query: str) -> list[Chunk]:
@@ -57,6 +73,7 @@ class Retriever:
             query=query_embedding,
             limit=self._top_k,
             with_payload=True,
+            search_params=SearchParams(hnsw_ef=_HNSW_EF_SEARCH),
         )
 
         chunks: list[Chunk] = []
