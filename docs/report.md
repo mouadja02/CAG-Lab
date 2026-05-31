@@ -1,6 +1,6 @@
 # CAG-Lab Benchmark Comparison: RAG Baseline vs Semantic Cache
 
-*Generated 2026-05-28 09:50 UTC*
+*Generated 2026-05-31 20:51 UTC*
 
 ## Summary
 

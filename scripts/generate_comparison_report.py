@@ -238,6 +238,7 @@ def generate_html(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Side-by-side CAG-Lab benchmark: RAG Baseline vs Semantic Cache on AWS documentation queries — quality, latency, cost, and cache behavior with interactive charts.">
 <title>CAG-Lab Benchmark Comparison</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -296,13 +297,28 @@ footer {{ text-align:center; color:var(--dim); font-size:0.8rem; margin-top:64px
 .badge.blue {{ background:rgba(30,58,95,0.6); color:var(--blue); }}
 .badge.purple {{ background:rgba(59,7,100,0.6); color:var(--purple); }}
 .full-width {{ grid-column:1/-1; }}
-.top-nav {{ position:sticky; top:0; z-index:100; background:rgba(10,14,26,0.85); backdrop-filter:blur(16px) saturate(180%); border-bottom:1px solid var(--border); }}
-.top-nav::after {{ content:''; position:absolute; bottom:-1px; left:0; right:0; height:1px; background:linear-gradient(90deg,transparent,var(--accent-1),var(--accent-2),transparent); opacity:0.4; }}
-.top-nav-inner {{ max-width:1200px; margin:0 auto; padding:0 24px; display:flex; align-items:center; gap:8px; height:56px; }}
-.top-nav-inner a {{ color:var(--muted); text-decoration:none; font-size:0.875rem; font-weight:500; padding:6px 14px; border-radius:8px; transition:all .2s ease; }}
-.top-nav-inner a:hover {{ color:var(--text); background:rgba(129,140,248,0.08); }}
-.top-nav-inner a.active {{ color:var(--text); background:rgba(129,140,248,0.1); }}
-.top-nav-inner .brand {{ font-size:1.15rem; font-weight:700; background:linear-gradient(135deg,var(--accent-1),var(--accent-2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; letter-spacing:-0.02em; margin-right:24px; padding:0; }}
+nav {{ position:sticky; top:0; z-index:100; background:rgba(10,14,26,0.85); backdrop-filter:blur(16px) saturate(180%); border-bottom:1px solid var(--border); }}
+nav::after {{ content:''; position:absolute; bottom:-1px; left:0; right:0; height:1px; background:linear-gradient(90deg,transparent,var(--accent-1),var(--accent-2),transparent); opacity:0.4; }}
+.nav-inner {{ max-width:1200px; margin:0 auto; padding:0 24px; display:flex; align-items:center; gap:32px; height:56px; position:relative; }}
+.nav-brand {{ font-size:1.15rem; font-weight:700; background:linear-gradient(135deg,var(--accent-1),var(--accent-2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; letter-spacing:-0.02em; text-decoration:none; }}
+.nav-links {{ display:flex; gap:8px; list-style:none; margin-left:auto; }}
+.nav-links a {{ color:var(--muted); text-decoration:none; font-size:0.875rem; font-weight:500; padding:6px 14px; border-radius:8px; transition:all .2s ease; }}
+.nav-links a:hover {{ color:var(--text); background:rgba(129,140,248,0.08); }}
+.nav-links a.active {{ color:var(--text); background:rgba(129,140,248,0.1); }}
+@media (max-width:520px) {{ .nav-inner {{ flex-wrap:wrap; height:auto; padding-top:10px; padding-bottom:10px; gap:8px 16px; }} .nav-links {{ margin-left:0; width:100%; justify-content:space-between; gap:4px; }} }}
+.skip-link {{ position:absolute; left:12px; top:-64px; z-index:300; background:var(--accent-1); color:#0a0e1a; padding:10px 16px; border-radius:8px; font-weight:600; font-size:0.85rem; transition:top .2s ease; }}
+.skip-link:focus {{ top:12px; outline:none; }}
+:focus-visible {{ outline:2px solid var(--accent-1); outline-offset:2px; border-radius:4px; }}
+.scroll-progress {{ position:fixed; top:0; left:0; right:0; height:3px; transform:scaleX(0); transform-origin:0 50%; background:linear-gradient(90deg,var(--accent-1),var(--accent-2)); z-index:200; }}
+@supports (animation-timeline: scroll()) {{ .scroll-progress {{ animation:grow-progress linear; animation-timeline:scroll(root block); }} }}
+@keyframes grow-progress {{ from {{ transform:scaleX(0); }} to {{ transform:scaleX(1); }} }}
+.to-top {{ position:fixed; bottom:24px; right:24px; z-index:150; width:44px; height:44px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:var(--surface); backdrop-filter:blur(8px); border:1px solid var(--border); color:var(--muted); font-size:1.05rem; text-decoration:none; box-shadow:0 4px 12px rgba(0,0,0,0.4); opacity:0.55; transition:opacity .2s ease, transform .2s ease, border-color .2s ease, color .2s ease; }}
+.to-top:hover {{ opacity:1; color:var(--text); border-color:var(--border-hover); transform:translateY(-2px); }}
+.legend {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; margin-bottom:40px; }}
+.legend .item {{ background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px 18px; }}
+.legend .item strong {{ display:block; color:var(--text); font-size:0.85rem; margin-bottom:3px; }}
+.legend .item span {{ color:var(--dim); font-size:0.8rem; line-height:1.5; }}
+@media (prefers-reduced-motion: reduce) {{ html {{ scroll-behavior:auto; }} *, *::before, *::after {{ animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; }} }}
 .btn {{ display:inline-flex; align-items:center; gap:8px; padding:10px 22px; border-radius:10px; font-size:0.875rem; font-weight:600; cursor:pointer; border:1px solid var(--border); background:var(--surface); color:var(--text); transition:all .2s ease; text-decoration:none; }}
 .btn:hover {{ border-color:var(--border-hover); background:var(--surface-hover); transform:translateY(-1px); color:var(--text); }}
 .btn.primary {{ background:linear-gradient(135deg,var(--accent-1),var(--accent-2)); border:none; color:#fff; box-shadow:0 2px 12px rgba(129,140,248,0.3); }}
@@ -310,19 +326,30 @@ footer {{ text-align:center; color:var(--dim); font-size:0.8rem; margin-top:64px
 </style>
 </head>
 <body>
-<div class="top-nav"><div class="top-nav-inner">
-  <a href="index.html" class="brand">CAG-Lab</a>
-  <a href="index.html">Overview</a>
-  <a href="rag.html">RAG</a>
-  <a href="cag.html">CAG</a>
-  <a href="report.html" class="active">Report</a>
-</div></div>
-<div class="container">
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="scroll-progress" aria-hidden="true"></div>
+<nav id="top"><div class="nav-inner">
+  <a href="index.html" class="nav-brand">CAG-Lab</a>
+  <ul class="nav-links">
+    <li><a href="index.html">Overview</a></li>
+    <li><a href="rag.html">RAG</a></li>
+    <li><a href="cag.html">CAG</a></li>
+    <li><a href="report.html" class="active" aria-current="page">Report</a></li>
+  </ul>
+</div></nav>
+<main class="container" id="main">
 <header>
   <h1>CAG-Lab Benchmark Comparison</h1>
   <p>{label_a} vs {label_b} — {model or "see config"}</p>
   <p style="font-size:0.8rem; color:#64748b;">Generated {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}</p>
 </header>
+
+<div class="legend">
+  <div class="item"><strong>p50 / p95 latency</strong><span>Median and 95th-percentile response time per question. p95 exposes the slow tail an average would hide.</span></div>
+  <div class="item"><strong>Cost per 1k questions</strong><span>Token cost scaled to 1,000 questions, so runs of different sizes compare fairly.</span></div>
+  <div class="item"><strong>Cache hit rate</strong><span>Share of queries answered from cache, with no retrieval or generation.</span></div>
+  <div class="item"><strong>False-positive rate</strong><span>Cache hits whose stored answer came from a different question. Lower is better.</span></div>
+</div>
 
 <div class="cards">
   <div class="card">
@@ -620,11 +647,13 @@ new Chart(ctxPie, {{
     &#8681; Download Markdown Report
   </a>
 </div>
+</main>
+
+<a href="#top" class="to-top" aria-label="Back to top">&#8593;</a>
 
 <footer>
   CAG-Lab Benchmark Report &middot; {model or "see config"}
 </footer>
-</div>
 </body>
 </html>
 """

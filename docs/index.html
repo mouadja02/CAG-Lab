@@ -42,12 +42,14 @@ cite a:hover { color: var(--accent-1); }
 </style>
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="scroll-progress" aria-hidden="true"></div>
 
-<nav>
+<nav id="top">
   <div class="nav-inner">
     <a href="index.html" class="nav-brand">CAG-Lab</a>
     <ul class="nav-links">
-      <li><a href="index.html" class="active">Overview</a></li>
+      <li><a href="index.html" class="active" aria-current="page">Overview</a></li>
       <li><a href="rag.html">RAG</a></li>
       <li><a href="cag.html">CAG</a></li>
       <li><a href="report.html">Report</a></li>
@@ -55,7 +57,7 @@ cite a:hover { color: var(--accent-1); }
   </div>
 </nav>
 
-<div class="container">
+<main class="container" id="main">
 
 <section class="hero">
   <h1>CAG-Lab</h1>
@@ -100,7 +102,7 @@ cite a:hover { color: var(--accent-1); }
     <div class="arch-card">
       <div class="icon">&#128269;</div>
       <h3>Classic RAG</h3>
-      <p>Embed query &rarr; Pinecone top-K &rarr; LLM generates answer. Every question pays the full retrieval + generation cost. Baseline for comparison.</p>
+      <p>Embed query &rarr; vector DB top-K &rarr; LLM generates answer. Every question pays the full retrieval + generation cost. Baseline for comparison.</p>
       <a href="rag.html" class="btn">How RAG Works</a>
     </div>
     <div class="arch-card">
@@ -114,6 +116,29 @@ cite a:hover { color: var(--accent-1); }
   <div class="notice">
     <strong>&#9432; Why Nemotron Nano 9B?</strong> We deliberately use a small, efficient open model via OpenRouter. A frontier model would answer many AWS questions from its training data alone — making retrieval irrelevant. We want a model that <em>must rely on the retrieved chunks</em>, so the benchmark measures retrieval quality, not model memorization.
   </div>
+</div>
+
+<!-- RAG VS CAG AT A GLANCE -->
+<div class="section">
+  <h2>RAG vs CAG at a Glance</h2>
+  <p class="lead">Same retrieval engine underneath. CAG simply adds a memory layer in front, so repeated questions skip the expensive work.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Dimension</th>
+        <th>Classic RAG</th>
+        <th>Semantic Cache (CAG)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Work on a repeated query</td><td>Full embed + search + generate, every time</td><td class="highlight">One embed + a cache lookup</td></tr>
+      <tr><td>Latency on a hit</td><td>~5 s (LLM-bound)</td><td class="highlight">~0.5 s</td></tr>
+      <tr><td>Cost on a repeat</td><td>Pays full generation cost</td><td class="highlight">Near zero</td></tr>
+      <tr><td>Freshness control</td><td>Always fresh</td><td>TTL + similarity threshold</td></tr>
+      <tr><td>Main risk</td><td>Cost &amp; latency at scale</td><td>False positives (a wrong cached answer)</td></tr>
+      <tr><td>Best fit</td><td>Every query is unique</td><td>Queries repeat or paraphrase (~31% do)</td></tr>
+    </tbody>
+  </table>
 </div>
 
 <!-- WHAT WE MEASURE -->
@@ -153,6 +178,26 @@ cite a:hover { color: var(--accent-1); }
   </div>
 </div>
 
+<!-- KEY CONCEPTS -->
+<div class="section">
+  <h2>Key Concepts</h2>
+  <p class="lead">A quick glossary for the terms used across these pages and the benchmark report.</p>
+  <dl class="glossary">
+    <div class="term"><dt>Embedding</dt><dd>A list of numbers that captures the meaning of a piece of text. Similar meanings land near each other. We use OpenAI <code>text-embedding-3-small</code> at 512 dimensions.</dd></div>
+    <div class="term"><dt>Vector search</dt><dd>Finding the stored vectors closest to a query vector, ranked by cosine similarity, instead of matching keywords.</dd></div>
+    <div class="term"><dt>Top-K</dt><dd>The K most similar document chunks returned by the search. This lab retrieves K = 5.</dd></div>
+    <div class="term"><dt>Cosine similarity</dt><dd>How aligned two vectors are, from 0 to 1. Computed as <code>1 − cosine_distance</code>; 1.0 means identical direction.</dd></div>
+    <div class="term"><dt>Semantic cache</dt><dd>A store of past question → answer pairs keyed by embedding. A new query that is close enough to a stored one is served instantly.</dd></div>
+    <div class="term"><dt>Similarity threshold</dt><dd>The minimum cosine similarity for a cache hit. We operate at <strong>0.96</strong> to keep false positives at zero.</dd></div>
+    <div class="term"><dt>HNSW</dt><dd>Hierarchical Navigable Small World, a graph index for fast approximate nearest-neighbor search. Used by both Redis and Qdrant here.</dd></div>
+    <div class="term"><dt>TTL</dt><dd>Time-to-live: how long a cached answer stays valid before it expires and the question is recomputed.</dd></div>
+    <div class="term"><dt>p50 / p95 latency</dt><dd>The median and 95th-percentile response time. p95 exposes the slow tail that an average would hide.</dd></div>
+    <div class="term"><dt>Cache hit rate</dt><dd>The fraction of queries answered from the cache without running retrieval or generation.</dd></div>
+    <div class="term"><dt>False positive</dt><dd>A cache hit that returns an answer belonging to a different question. We detect these by comparing the stored <code>source_id</code>.</dd></div>
+    <div class="term"><dt>Judge score</dt><dd>A 0 or 1 correctness verdict from a separate LLM judge, kept independent of the model being tested to avoid self-grading bias.</dd></div>
+  </dl>
+</div>
+
 <!-- LATEST RESULTS -->
 <div class="section">
   <h2>Latest Results at a Glance</h2>
@@ -187,7 +232,7 @@ cite a:hover { color: var(--accent-1); }
 <!-- PIPELINE -->
 <div class="section">
   <h2>Experiment Pipeline</h2>
-  <div class="step-flow">
+  <div class="step-flow vertical">
     <div class="step">
       <div class="step-num">1</div>
       <h4>Dataset</h4>
@@ -197,7 +242,7 @@ cite a:hover { color: var(--accent-1); }
     <div class="step">
       <div class="step-num">2</div>
       <h4>Index</h4>
-      <p>OpenAI embed &rarr; Pinecone (512d)</p>
+      <p>OpenAI embed &rarr; Qdrant / Pinecone (512d)</p>
     </div>
     <div class="step-arrow">&rarr;</div>
     <div class="step">
@@ -258,8 +303,8 @@ cite a:hover { color: var(--accent-1); }
     </div>
     <div class="card">
       <div class="label">Vector DB</div>
-      <div class="value" style="font-size:1.4rem;">Pinecone</div>
-      <div class="sub">aws-docs index, cosine similarity</div>
+      <div class="value" style="font-size:1.4rem;">Qdrant / Pinecone</div>
+      <div class="sub">env-switchable, cosine similarity, 512d</div>
     </div>
     <div class="card">
       <div class="label">Cache</div>
@@ -316,7 +361,9 @@ cag-lab run --config configs/experiments/semantic_cache.yaml
 python scripts/generate_comparison_report.py --auto</pre>
 </div>
 
-</div>
+</main>
+
+<a href="#top" class="to-top" aria-label="Back to top">&#8593;</a>
 
 <footer>
   <p>CAG-Lab &middot; <a href="https://github.com/mouadja02/cag-lab" style="color:var(--muted);">github.com/mouadja02/cag-lab</a></p>

@@ -3,25 +3,28 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="How Cache-Augmented Generation works: a Redis semantic vector cache in front of RAG. Store, lookup, the similarity threshold, a HIT/MISS worked example, and benchmark results.">
 <title>CAG — Cache-Augmented Generation | CAG-Lab</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="scroll-progress" aria-hidden="true"></div>
 
-<nav>
+<nav id="top">
   <div class="nav-inner">
     <a href="index.html" class="nav-brand">CAG-Lab</a>
     <ul class="nav-links">
       <li><a href="index.html">Overview</a></li>
       <li><a href="rag.html">RAG</a></li>
-      <li><a href="cag.html" class="active">CAG</a></li>
+      <li><a href="cag.html" class="active" aria-current="page">CAG</a></li>
       <li><a href="report.html">Report</a></li>
     </ul>
   </div>
 </nav>
 
-<div class="container">
+<main class="container" id="main">
 
 <section class="hero">
   <h1>Cache-Augmented Generation</h1>
@@ -31,7 +34,15 @@
 <div class="section">
   <h2>What Is CAG?</h2>
   <p>Cache-Augmented Generation (CAG) extends classic RAG with a <strong>semantic vector cache</strong>. Before running the expensive retrieval + generation pipeline, the system checks if a semantically similar question was already answered. If so, it returns the cached answer instantly — skipping retrieval and generation entirely.</p>
-  <p>The cache uses Redis vector search with HNSW indexing. Each stored entry contains the query embedding, the generated answer, cited sources, model info, a creation timestamp, and a TTL. Lookup compares the new query's embedding against all cached entries and returns a HIT only if cosine similarity is at or above a configurable threshold (default: 0.92).</p>
+  <p>The cache uses Redis vector search with HNSW indexing. Each stored entry contains the query embedding, the generated answer, cited sources, model info, a creation timestamp, and a TTL. Lookup compares the new query's embedding against the nearest cached entry and returns a HIT only if cosine similarity is at or above a configurable threshold (library default 0.92; this lab operates at <strong>0.96</strong>, explained below).</p>
+
+  <div class="analogy">
+    <div class="analogy-icon">&#129504;</div>
+    <div>
+      <h4>Think of it as a colleague with a good memory</h4>
+      <p>Ask a teammate a question they answered last week and they reply instantly from memory instead of re-reading the docs. CAG does the same: if your question is <strong>close enough</strong> to one already answered, it reuses that answer. The art is deciding what counts as &ldquo;close enough&rdquo; — too loose and you serve the wrong answer, too strict and you rarely reuse anything.</p>
+    </div>
+  </div>
 </div>
 
 <div class="section">
@@ -71,7 +82,9 @@
 <div class="section">
   <h2>Architecture Flow</h2>
 
-  <svg class="diagram" viewBox="0 0 900 480" xmlns="http://www.w3.org/2000/svg">
+  <svg class="diagram" viewBox="0 0 900 480" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="cagDiagramTitle cagDiagramDesc">
+    <title id="cagDiagramTitle">Cache-Augmented Generation flow</title>
+    <desc id="cagDiagramDesc">The query is embedded and looked up in the Redis vector cache. On a HIT the cached answer is returned instantly. On a MISS the full RAG pipeline runs and the result is stored back in the cache for next time.</desc>
     <defs>
       <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#818cf8"/><stop offset="100%" stop-color="#c084fc"/></linearGradient>
       <filter id="shadow"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.3"/></filter>
@@ -123,7 +136,7 @@
 
     <!-- TTL label -->
     <rect x="340" y="320" width="260" height="28" rx="6" fill="#0f172a" stroke="#334155" stroke-width="1"/>
-    <text x="470" y="339" fill="#64748b" font-size="11" text-anchor="middle">TTL + similarity threshold (0.92) guard freshness</text>
+    <text x="470" y="339" fill="#64748b" font-size="11" text-anchor="middle">TTL + similarity threshold (0.96) guard freshness</text>
 
     <defs>
       <marker id="ag" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#34d399"/></marker>
@@ -169,6 +182,27 @@ if similarity &gt;= threshold AND not expired:
     return HIT &rarr; cached answer (free, ~0.5s)
 else:
     return MISS &rarr; run full RAG + store result</pre>
+
+  <h3 style="margin-top:24px;">Hit or Miss: A Worked Example</h3>
+  <p>Suppose the cache already holds one answered question. Here is what happens to two follow-up queries:</p>
+  <div class="example">
+    <div class="example-row">
+      <div class="example-tag ctx">Cached</div>
+      <div class="example-body">&ldquo;How do I enable versioning on an Amazon S3 bucket?&rdquo; <span class="muted">&mdash; answer + sources already stored</span></div>
+    </div>
+    <div class="example-row">
+      <div class="example-tag a">Hit</div>
+      <div class="example-body">&ldquo;What&rsquo;s the way to turn on versioning for an S3 bucket?&rdquo;<br><span class="muted">similarity 0.974 &ge; 0.96 &rarr; serve the cached answer in ~0.5 s for ~$0</span></div>
+    </div>
+    <div class="example-row">
+      <div class="example-tag miss">Miss</div>
+      <div class="example-body">&ldquo;How do I create a CloudFront distribution?&rdquo;<br><span class="muted">similarity 0.71 &lt; 0.96 &rarr; run full RAG, then store the new answer for next time</span></div>
+    </div>
+  </div>
+
+  <div class="notice">
+    <strong>&#9432; Why a 0.96 threshold?</strong> At the library default of 0.92 the cache accepted borderline matches and occasionally served a confident but wrong answer to troubleshooting and multi-hop questions. Raising the bar to 0.96 drove false positives to <strong>0.0%</strong> while still catching 73% of paraphrases. Net effect: answer quality went from &minus;1% to <strong>+6%</strong> versus RAG.
+  </div>
 </div>
 
 <div class="section">
@@ -205,12 +239,13 @@ else:
   ON HASH PREFIX 1 cache:
   SCHEMA
     created_at NUMERIC
-    embedding VECTOR HNSW 6 TYPE FLOAT32
+    embedding VECTOR HNSW 10 TYPE FLOAT32
       DIM 512
       DISTANCE_METRIC COSINE
-      M 16
-      EF_CONSTRUCTION 200</pre>
-  <p style="margin-top:12px;">The index uses the HNSW algorithm with cosine distance. M=16 and EF_CONSTRUCTION=200 provide a good balance of recall and build speed. The index is created automatically on first use if it doesn't exist.</p>
+      M 64
+      EF_CONSTRUCTION 400
+      EF_RUNTIME 300</pre>
+  <p style="margin-top:12px;">The index uses the HNSW algorithm with cosine distance. M=64 with EF_CONSTRUCTION=400 builds a denser graph for higher recall, and EF_RUNTIME=300 widens the search at query time. The index is created automatically on first use, and rebuilt if its parameters change.</p>
 </div>
 
 <div class="section">
@@ -242,7 +277,9 @@ else:
   </p>
 </div>
 
-</div>
+</main>
+
+<a href="#top" class="to-top" aria-label="Back to top">&#8593;</a>
 
 <footer>
   CAG-Lab &middot; Benchmarking RAG vs Cache-Augmented Generation

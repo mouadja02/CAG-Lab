@@ -3,25 +3,28 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="How classic Retrieval-Augmented Generation works: query embedding, vector search, context assembly, LLM generation — plus a worked example, cost model, and limitations.">
 <title>RAG — Retrieval-Augmented Generation | CAG-Lab</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="scroll-progress" aria-hidden="true"></div>
 
-<nav>
+<nav id="top">
   <div class="nav-inner">
     <a href="index.html" class="nav-brand">CAG-Lab</a>
     <ul class="nav-links">
       <li><a href="index.html">Overview</a></li>
-      <li><a href="rag.html" class="active">RAG</a></li>
+      <li><a href="rag.html" class="active" aria-current="page">RAG</a></li>
       <li><a href="cag.html">CAG</a></li>
       <li><a href="report.html">Report</a></li>
     </ul>
   </div>
 </nav>
 
-<div class="container">
+<main class="container" id="main">
 
 <section class="hero">
   <h1>Retrieval-Augmented Generation</h1>
@@ -32,12 +35,22 @@
   <h2>What Is RAG?</h2>
   <p>Retrieval-Augmented Generation (RAG) combines information retrieval with large language models. Instead of relying solely on the model's training data, RAG first retrieves relevant documents from an external knowledge base, then feeds those documents to the LLM as context for generating an answer.</p>
   <p>This approach grounds the LLM's output in real, verifiable sources — critical for domains like technical documentation, legal texts, or enterprise knowledge bases where accuracy matters and hallucinations are costly.</p>
+
+  <div class="analogy">
+    <div class="analogy-icon">&#128218;</div>
+    <div>
+      <h4>Think of it as an open-book exam</h4>
+      <p>A closed-book LLM answers from memory and may confidently invent details. RAG hands the model the <strong>relevant pages</strong> first, then asks it to answer using only what is in front of it, citing where each fact came from. Better grounding, fewer hallucinations.</p>
+    </div>
+  </div>
 </div>
 
 <div class="section">
   <h2>Architecture Flow</h2>
 
-  <svg class="diagram" viewBox="0 0 900 380" xmlns="http://www.w3.org/2000/svg">
+  <svg class="diagram" viewBox="0 0 900 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="ragDiagramTitle ragDiagramDesc">
+    <title id="ragDiagramTitle">Classic RAG pipeline</title>
+    <desc id="ragDiagramDesc">A user query is embedded, then used to search the vector database for the top-K most similar chunks. Those chunks plus the question are passed to the LLM, which returns an answer with cited sources.</desc>
     <defs>
       <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#818cf8"/><stop offset="100%" stop-color="#c084fc"/></linearGradient>
       <filter id="shadow"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.3"/></filter>
@@ -60,10 +73,10 @@
     <!-- Arrow 2 -->
     <line x1="390" y1="190" x2="430" y2="190" stroke="#334155" stroke-width="2" marker-end="url(#arrowhead)"/>
 
-    <!-- Pinecone -->
+    <!-- Vector DB -->
     <rect x="440" y="160" width="160" height="60" rx="12" fill="#1e293b" stroke="#334155" stroke-width="1.5" filter="url(#shadow)"/>
-    <text x="520" y="184" fill="#e2e8f0" font-size="14" font-weight="600" text-anchor="middle">Pinecone</text>
-    <text x="520" y="204" fill="#94a3b8" font-size="11" text-anchor="middle">Vector Search (512d)</text>
+    <text x="520" y="184" fill="#e2e8f0" font-size="14" font-weight="600" text-anchor="middle">Vector DB</text>
+    <text x="520" y="204" fill="#94a3b8" font-size="11" text-anchor="middle">Qdrant / Pinecone (512d)</text>
 
     <!-- Arrow 3 to chunks -->
     <line x1="600" y1="190" x2="640" y2="190" stroke="#334155" stroke-width="2" marker-end="url(#arrowhead)"/>
@@ -92,7 +105,7 @@
 
     <!-- Knowledge base db -->
     <rect x="440" y="80" width="160" height="40" rx="8" fill="#0f172a" stroke="#334155" stroke-width="1" stroke-dasharray="4 4"/>
-    <text x="520" y="105" fill="#64748b" font-size="11" text-anchor="middle">AWS Docs (Pinecone)</text>
+    <text x="520" y="105" fill="#64748b" font-size="11" text-anchor="middle">AWS Docs &middot; 89k vectors</text>
     <line x1="520" y1="120" x2="520" y2="158" stroke="#64748b" stroke-width="1" stroke-dasharray="4 4"/>
     <circle cx="520" cy="159" r="3" fill="#64748b"/>
   </svg>
@@ -100,7 +113,7 @@
 
 <div class="section">
   <h2>Step-by-Step</h2>
-  <div class="step-flow">
+  <div class="step-flow vertical">
     <div class="step">
       <div class="step-num">1</div>
       <h4>Query Embedding</h4>
@@ -110,7 +123,7 @@
     <div class="step">
       <div class="step-num">2</div>
       <h4>Vector Search</h4>
-      <p>Pinecone finds the top-K most similar document chunks via cosine similarity</p>
+      <p>The vector DB (Qdrant or Pinecone) finds the top-K most similar document chunks via cosine similarity</p>
     </div>
     <div class="step-arrow">&rarr;</div>
     <div class="step">
@@ -134,8 +147,32 @@
 </div>
 
 <div class="section">
+  <h2>A Worked Example</h2>
+  <p class="lead">What a single question actually looks like as it moves through the pipeline.</p>
+  <div class="example">
+    <div class="example-row">
+      <div class="example-tag q">Query</div>
+      <div class="example-body">&ldquo;How do I enable versioning on an Amazon S3 bucket?&rdquo;</div>
+    </div>
+    <div class="example-row">
+      <div class="example-tag ctx">Retrieved</div>
+      <div class="example-body">
+        Top-5 chunks ranked by cosine similarity. The two most relevant:<br>
+        <code>[1]</code> S3/userguide/Versioning.html <span class="muted">&mdash; &ldquo;Versioning keeps multiple variants of an object&hellip; set the bucket versioning state with PutBucketVersioning.&rdquo;</span><br>
+        <code>[3]</code> S3/userguide/manage-versioning-examples.html <span class="muted">&mdash; console and CLI steps.</span>
+      </div>
+    </div>
+    <div class="example-row">
+      <div class="example-tag a">Answer</div>
+      <div class="example-body">Set the bucket&rsquo;s versioning state to <code>Enabled</code> &mdash; in the console under <em>Bucket &rarr; Properties &rarr; Bucket Versioning</em>, or via <code>aws s3api put-bucket-versioning</code>. After that, S3 retains every version of each object. <span class="muted">Sources: [1], [3]</span></div>
+    </div>
+  </div>
+  <p>The model only sees the retrieved chunks, not the whole knowledge base. If the right passage is not in the top-K, RAG cannot recover it. That is why retrieval quality sets the ceiling on answer quality.</p>
+</div>
+
+<div class="section">
   <h2>Cost Model</h2>
-  <p>Every question incurs the full pipeline cost — embedding call + Pinecone query + LLM generation + judge evaluation. With Nemotron Nano 9B via OpenRouter ($0.30 input / $1.20 output per 1M tokens), costs are dramatically lower than frontier models.</p>
+  <p>Every question incurs the full pipeline cost — embedding call + vector search + LLM generation + judge evaluation. With Nemotron Nano 9B via OpenRouter ($0.30 input / $1.20 output per 1M tokens), costs are dramatically lower than frontier models.</p>
 
   <div class="cards">
     <div class="card">
@@ -172,7 +209,7 @@
     <div class="feature-item">
       <div class="icon">&#9201;</div>
       <h4>Latency is bounded by LLM</h4>
-      <p>p50 of ~5 seconds per question, dominated by LLM inference time. Pinecone retrieval is fast (~100ms), but generation takes 3-15 seconds.</p>
+      <p>p50 of ~5 seconds per question, dominated by LLM inference time. Vector search is fast (~100ms), but generation takes 3-15 seconds.</p>
     </div>
     <div class="feature-item">
       <div class="icon">&#127919;</div>
@@ -187,7 +224,9 @@
   </div>
 </div>
 
-</div>
+</main>
+
+<a href="#top" class="to-top" aria-label="Back to top">&#8593;</a>
 
 <footer>
   CAG-Lab &middot; Benchmarking RAG vs Cache-Augmented Generation
